@@ -45,6 +45,37 @@ impl Animation {
     }
 }
 
+struct Cursors<'a> {
+    current_cursor_texture: &'a Texture2D,
+    position: Vector2,
+}
+
+impl<'a> Cursors<'a> {
+    fn update_cursor(
+        normal_texture: &'a Texture2D,
+        hover_texture: &'a Texture2D,
+        cursor_grid_x: i32,
+        cursor_grid_y: i32,
+        char_grid_x: i32,
+        char_grid_y: i32,
+    ) -> Self {
+        let is_hovering = cursor_grid_x == char_grid_x && cursor_grid_y == char_grid_y;
+        let current_cursor_texture = if is_hovering {
+            hover_texture
+        } else {
+            normal_texture
+        };
+
+        Cursors {
+            current_cursor_texture,
+            position: Vector2::new(
+                (cursor_grid_x * TILE_SIZE) as f32,
+                (cursor_grid_y * TILE_SIZE) as f32,
+            ),
+        }
+    }
+}
+
 fn main() {
     // init window
     let (mut rl, thread) = raylib::init()
@@ -60,8 +91,12 @@ fn main() {
             "assets/humanChar/Human soldier/Human soldier/human_soldier-Idle.png",
         )
         .unwrap();
-    let mouse_texture = rl
+
+    let mouse_normal_texture = rl
         .load_texture(&thread, "assets/cursors/PNG/01.png")
+        .unwrap();
+    let mouse_hover_texture = rl
+        .load_texture(&thread, "assets/cursors/PNG/10.png")
         .unwrap();
 
     let mut animation = Animation {
@@ -94,6 +129,18 @@ fn main() {
 
         let mouse_position = rl.get_mouse_position();
 
+        let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
+        let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
+
+        let cursor = Cursors::update_cursor(
+            &mouse_normal_texture,
+            &mouse_hover_texture,
+            cursor_grid_x,
+            cursor_grid_y,
+            0, // char_grid_x
+            0, // char_grid_y
+        );
+
         // drawing
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::RAYWHITE);
@@ -121,7 +168,7 @@ fn main() {
         );
 
         d.draw_texture_ex(
-            &mouse_texture,
+            cursor.current_cursor_texture,
             Vector2::new(mouse_position.x, mouse_position.y),
             0.0,
             0.7,
