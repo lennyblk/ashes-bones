@@ -1,7 +1,10 @@
 use raylib::prelude::*;
 
-const SCREEN_WIDTH: i32 = 800;
-const SCREEN_HEIGHT: i32 = 600;
+const TILE_SIZE: i32 = 48;
+const GRID_COLS: i32 = 25;
+const GRID_ROWS: i32 = 16;
+const SCREEN_WIDTH: i32 = GRID_COLS * TILE_SIZE;
+const SCREEN_HEIGHT: i32 = GRID_ROWS * TILE_SIZE;
 
 struct Animation {
     texture: Texture2D,
@@ -68,6 +71,16 @@ fn main() {
         duration_left: 0.1,
     };
 
+    fn grid_to_screen_x(grid_x: i32) -> f32 {
+        let x = (grid_x * TILE_SIZE) as f32 + (-40.0);
+        x
+    }
+
+    fn grid_to_screen_y(grid_y: i32) -> f32 {
+        let y = (grid_y * TILE_SIZE) as f32 + (-40.0);
+        y
+    }
+
     // run window
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
@@ -78,11 +91,11 @@ fn main() {
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::RAYWHITE);
 
-        for i in (40..SCREEN_HEIGHT).step_by(40) {
+        for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
             d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
         }
 
-        for i in (40..SCREEN_WIDTH).step_by(40) {
+        for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
             d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
         }
 
@@ -90,8 +103,8 @@ fn main() {
             &animation.texture,
             animation.animation_frame(),
             Rectangle {
-                x: -40.0 as f32,
-                y: -40.0 as f32,
+                x: grid_to_screen_x(0) as f32,
+                y: grid_to_screen_y(0) as f32,
                 width: 128.0,
                 height: 128.0,
             },
