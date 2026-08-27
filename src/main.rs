@@ -1,3 +1,4 @@
+use raylib::consts::MouseButton;
 use raylib::prelude::*;
 
 const TILE_SIZE: i32 = 48;
@@ -50,6 +51,7 @@ fn main() {
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
         .title("Ashes&Bones")
         .build();
+    rl.hide_cursor();
 
     //load texture
     let human_idle_texture = rl
@@ -57,6 +59,9 @@ fn main() {
             &thread,
             "assets/humanChar/Human soldier/Human soldier/human_soldier-Idle.png",
         )
+        .unwrap();
+    let mouse_texture = rl
+        .load_texture(&thread, "assets/cursors/PNG/01.png")
         .unwrap();
 
     let mut animation = Animation {
@@ -87,6 +92,8 @@ fn main() {
 
         animation.animation_update(delta_time);
 
+        let mouse_position = rl.get_mouse_position();
+
         // drawing
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::RAYWHITE);
@@ -110,6 +117,14 @@ fn main() {
             },
             Vector2::new(0.0, 0.0),
             0.0,
+            Color::WHITE,
+        );
+
+        d.draw_texture_ex(
+            &mouse_texture,
+            Vector2::new(mouse_position.x, mouse_position.y),
+            0.0,
+            0.7,
             Color::WHITE,
         );
     }
