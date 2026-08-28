@@ -1,4 +1,4 @@
-use raylib::consts::MouseButton;
+use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
 
 const TILE_SIZE: i32 = 48;
@@ -48,31 +48,43 @@ impl Animation {
 struct Cursors<'a> {
     current_cursor_texture: &'a Texture2D,
     position: Vector2,
+    is_selected: bool,
 }
 
 impl<'a> Cursors<'a> {
     fn update_cursor(
+        &mut self,
         normal_texture: &'a Texture2D,
         hover_texture: &'a Texture2D,
+        click_texture: &'a Texture2D,
         cursor_grid_x: i32,
         cursor_grid_y: i32,
         char_grid_x: i32,
         char_grid_y: i32,
-    ) -> Self {
+        mouse_just_clicked: bool,
+    ) {
         let is_hovering = cursor_grid_x == char_grid_x && cursor_grid_y == char_grid_y;
-        let current_cursor_texture = if is_hovering {
+
+        if mouse_just_clicked {
+            if is_hovering {
+                self.is_selected = !self.is_selected;
+            } else {
+                self.is_selected = false;
+            }
+        }
+
+        self.current_cursor_texture = if self.is_selected {
+            click_texture
+        } else if is_hovering {
             hover_texture
         } else {
             normal_texture
         };
 
-        Cursors {
-            current_cursor_texture,
-            position: Vector2::new(
-                (cursor_grid_x * TILE_SIZE) as f32,
-                (cursor_grid_y * TILE_SIZE) as f32,
-            ),
-        }
+        self.position = Vector2::new(
+            (cursor_grid_x * TILE_SIZE) as f32,
+            (cursor_grid_y * TILE_SIZE) as f32,
+        );
     }
 }
 
@@ -99,6 +111,10 @@ fn main() {
         .load_texture(&thread, "assets/cursors/PNG/10.png")
         .unwrap();
 
+    let mouse_click_texture = rl
+        .load_texture(&thread, "assets/cursors/PNG/17.png")
+        .unwrap();
+
     let mut animation = Animation {
         texture: human_idle_texture,
         frame_width: 130,
@@ -121,6 +137,20 @@ fn main() {
         y
     }
 
+    let mouse_position = rl.get_mouse_position();
+
+    let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
+    let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
+
+    let mut cursor = Cursors {
+        current_cursor_texture: &mouse_normal_texture,
+        position: Vector2::new(
+            (cursor_grid_x * TILE_SIZE) as f32,
+            (cursor_grid_y * TILE_SIZE) as f32,
+        ),
+        is_selected: false,
+    };
+
     // run window
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
@@ -128,17 +158,22 @@ fn main() {
         animation.animation_update(delta_time);
 
         let mouse_position = rl.get_mouse_position();
+        fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
+            rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+        }
 
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
 
-        let cursor = Cursors::update_cursor(
+        cursor.update_cursor(
             &mouse_normal_texture,
             &mouse_hover_texture,
+            &mouse_click_texture,
             cursor_grid_x,
             cursor_grid_y,
-            0, // char_grid_x
-            0, // char_grid_y
+            0, // character grid x
+            0, // character grid y
+            mouse_is_clicked(&rl),
         );
 
         // drawing
