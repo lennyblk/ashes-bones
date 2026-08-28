@@ -1,5 +1,6 @@
 use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
+use std::collections::HashMap;
 
 const TILE_SIZE: i32 = 48;
 const GRID_COLS: i32 = 25;
@@ -45,6 +46,56 @@ impl Animation {
     }
 }
 
+struct Character {
+    grid_x: i32,
+    grid_y: i32,
+    screen_x: f32,
+    screen_y: f32,
+    move_points: i32,
+    hp_points: i32,
+    path: Vec<(i32, i32)>,
+}
+
+impl Character {
+    fn update_position(&mut self, delta_time: f32) {
+        let target_x = self.grid_x * TILE_SIZE - 40;
+        let target_y = self.grid_y * TILE_SIZE - 40;
+
+        let distance_x = target_x as f32 - self.screen_x;
+        let distance_y = target_y as f32 - self.screen_y;
+
+        // abs (recup la valeur absolu de la distance restante) pour recup toujours un valeur positif que j'aille a gauche ou a droite, comme ca je snap pas trop tot si c'est negatif
+        if distance_x.abs() > 1.0 {
+            self.screen_x += distance_x * delta_time * 5.0;
+        } else {
+            self.screen_x = target_x as f32;
+        }
+
+        if distance_y.abs() > 1.0 {
+            self.screen_y += distance_y * delta_time * 5.0;
+        } else {
+            self.screen_y = target_y as f32;
+        }
+    }
+    fn advance_path(&mut self) {
+        if self.path.is_empty() {
+            return;
+        }
+        let target = self.path[0];
+        let target_screen_x = (target.0 * TILE_SIZE - 40) as f32;
+        let target_screen_y = (target.1 * TILE_SIZE - 40) as f32;
+
+        if (self.screen_x - target_screen_x).abs() < 1.0
+            && (self.screen_y - target_screen_y).abs() < 1.0
+        {
+            self.path.remove(0);
+            return;
+        }
+        self.grid_x = target.0;
+        self.grid_y = target.1;
+    }
+}
+
 struct MovementRange {
     reachable_tiles: Vec<(i32, i32)>,
 }
@@ -56,10 +107,11 @@ impl MovementRange {
         move_points: i32,
         grid_cols: i32,
         grid_rows: i32,
-    ) -> Vec<(i32, i32)> {
+    ) -> (Vec<(i32, i32)>, HashMap<(i32, i32), (i32, i32)>) {
         let mut visited: Vec<(i32, i32)> = vec![(start_x, start_y)];
         let mut queue: Vec<(i32, i32, i32)> = vec![(start_x, start_y, 0)]; // x, y, coût actuel
         let mut index = 0;
+        let mut came_from: HashMap<(i32, i32), (i32, i32)> = HashMap::new();
 
         while index < queue.len() {
             let (x, y, cost) = queue[index];
@@ -78,14 +130,11 @@ impl MovementRange {
                 if in_bounds && !already_visited {
                     visited.push((nx, ny));
                     queue.push((nx, ny, cost + 1));
+                    came_from.insert((nx, ny), (x, y));
                 }
             }
         }
-        visited
-    }
-
-    fn can_move_to(&mut self, x: i32, y: i32) -> bool {
-        self.reachable_tiles.contains(&(x, y))
+        (visited, came_from)
     }
 }
 struct Cursors<'a> {
@@ -194,19 +243,34 @@ fn main() {
         is_selected: false,
     };
 
-    let mut char_grid_x = 16;
-    let mut char_grid_y = 10;
+    let mut character = Character {
+        grid_x: 5,
+        grid_y: 5,
+        screen_x: grid_to_screen_x(5),
+        screen_y: grid_to_screen_y(5),
+        move_points: 3,
+        hp_points: 100,
+        path: Vec::new(),
+    };
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
 
         animation.animation_update(delta_time);
+        character.update_position(delta_time);
+        character.advance_path();
 
-        let move_range = if cursor.is_selected {
-            MovementRange::compute_movement_range(char_grid_x, char_grid_y, 3, GRID_COLS, GRID_ROWS) // 3 = move points
+        let (move_range, came_from) = if cursor.is_selected {
+            MovementRange::compute_movement_range(
+                character.grid_x,
+                character.grid_y,
+                character.move_points,
+                GRID_COLS,
+                GRID_ROWS,
+            )
         } else {
-            vec![]
+            (Vec::new(), HashMap::new())
         };
 
         let mouse_position = rl.get_mouse_position();
@@ -219,8 +283,14 @@ fn main() {
 
         if mouse_is_clicked(&rl) && cursor.is_selected {
             if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
-                char_grid_x = cursor_grid_x;
-                char_grid_y = cursor_grid_y;
+                let mut path = vec![(cursor_grid_x, cursor_grid_y)];
+                let mut current = (cursor_grid_x, cursor_grid_y);
+                while let Some(&parent) = came_from.get(&current) {
+                    path.push(parent);
+                    current = parent;
+                }
+                path.reverse();
+                character.path = path;
             }
         }
 
@@ -230,8 +300,8 @@ fn main() {
             &mouse_click_texture,
             cursor_grid_x,
             cursor_grid_y,
-            char_grid_x,
-            char_grid_y,
+            character.grid_x,
+            character.grid_y,
             mouse_is_clicked(&rl),
         );
 
@@ -260,8 +330,8 @@ fn main() {
             &animation.texture,
             animation.animation_frame(),
             Rectangle {
-                x: grid_to_screen_x(char_grid_x) as f32,
-                y: grid_to_screen_y(char_grid_y) as f32,
+                x: character.screen_x,
+                y: character.screen_y,
                 width: 128.0,
                 height: 128.0,
             },
