@@ -45,6 +45,49 @@ impl Animation {
     }
 }
 
+struct MovementRange {
+    reachable_tiles: Vec<(i32, i32)>,
+}
+
+impl MovementRange {
+    fn compute_movement_range(
+        start_x: i32,
+        start_y: i32,
+        move_points: i32,
+        grid_cols: i32,
+        grid_rows: i32,
+    ) -> Vec<(i32, i32)> {
+        let mut visited: Vec<(i32, i32)> = vec![(start_x, start_y)];
+        let mut queue: Vec<(i32, i32, i32)> = vec![(start_x, start_y, 0)]; // x, y, coût actuel
+        let mut index = 0;
+
+        while index < queue.len() {
+            let (x, y, cost) = queue[index];
+            index += 1;
+
+            if cost >= move_points {
+                continue;
+            }
+
+            let neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
+
+            for (nx, ny) in neighbors {
+                let in_bounds = nx >= 0 && nx < grid_cols && ny >= 0 && ny < grid_rows;
+                let already_visited = visited.contains(&(nx, ny));
+
+                if in_bounds && !already_visited {
+                    visited.push((nx, ny));
+                    queue.push((nx, ny, cost + 1));
+                }
+            }
+        }
+        visited
+    }
+
+    fn can_move_to(&mut self, x: i32, y: i32) -> bool {
+        self.reachable_tiles.contains(&(x, y))
+    }
+}
 struct Cursors<'a> {
     current_cursor_texture: &'a Texture2D,
     position: Vector2,
@@ -85,46 +128,6 @@ impl<'a> Cursors<'a> {
             (cursor_grid_x * TILE_SIZE) as f32,
             (cursor_grid_y * TILE_SIZE) as f32,
         );
-    }
-}
-
-struct MovementRange {
-    reachable_tiles: Vec<(i32, i32)>,
-}
-
-impl MovementRange {
-    fn compute_movement_range(
-        start_x: i32,
-        start_y: i32,
-        move_points: i32,
-        grid_cols: i32,
-        grid_rows: i32,
-    ) -> Vec<(i32, i32)> {
-        let mut visited: Vec<(i32, i32)> = vec![(start_x, start_y)];
-        let mut queue: Vec<(i32, i32, i32)> = vec![(start_x, start_y, 0)]; // x, y, coût actuel
-        let mut index = 0;
-
-        while index < queue.len() {
-            let (x, y, cost) = queue[index];
-            index += 1;
-
-            if cost >= move_points {
-                continue;
-            }
-
-            let neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
-
-            for (nx, ny) in neighbors {
-                let in_bounds = nx >= 0 && nx < grid_cols && ny >= 0 && ny < grid_rows;
-                let already_visited = visited.contains(&(nx, ny));
-
-                if in_bounds && !already_visited {
-                    visited.push((nx, ny));
-                    queue.push((nx, ny, cost + 1));
-                }
-            }
-        }
-        visited
     }
 }
 
@@ -191,14 +194,20 @@ fn main() {
         is_selected: false,
     };
 
-    let char_grid_x = 16;
-    let char_grid_y = 10;
+    let mut char_grid_x = 16;
+    let mut char_grid_y = 10;
 
-    // run window
+    // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
 
         animation.animation_update(delta_time);
+
+        let move_range = if cursor.is_selected {
+            MovementRange::compute_movement_range(char_grid_x, char_grid_y, 3, GRID_COLS, GRID_ROWS) // 3 = move points
+        } else {
+            vec![]
+        };
 
         let mouse_position = rl.get_mouse_position();
         fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
@@ -207,6 +216,13 @@ fn main() {
 
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
+
+        if mouse_is_clicked(&rl) && cursor.is_selected {
+            if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
+                char_grid_x = cursor_grid_x;
+                char_grid_y = cursor_grid_y;
+            }
+        }
 
         cursor.update_cursor(
             &mouse_normal_texture,
@@ -219,7 +235,7 @@ fn main() {
             mouse_is_clicked(&rl),
         );
 
-        // drawing
+        // drawing --------------------------------------------------------------
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::RAYWHITE);
 
@@ -230,11 +246,6 @@ fn main() {
         for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
             d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
         }
-        let move_range = if cursor.is_selected {
-            MovementRange::compute_movement_range(char_grid_x, char_grid_y, 3, GRID_COLS, GRID_ROWS) // 3 = move points
-        } else {
-            vec![]
-        };
 
         for (x, y) in &move_range {
             d.draw_rectangle(
