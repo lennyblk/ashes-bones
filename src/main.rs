@@ -88,6 +88,46 @@ impl<'a> Cursors<'a> {
     }
 }
 
+struct MovementRange {
+    reachable_tiles: Vec<(i32, i32)>,
+}
+
+impl MovementRange {
+    fn compute_movement_range(
+        start_x: i32,
+        start_y: i32,
+        move_points: i32,
+        grid_cols: i32,
+        grid_rows: i32,
+    ) -> Vec<(i32, i32)> {
+        let mut visited: Vec<(i32, i32)> = vec![(start_x, start_y)];
+        let mut queue: Vec<(i32, i32, i32)> = vec![(start_x, start_y, 0)]; // x, y, coût actuel
+        let mut index = 0;
+
+        while index < queue.len() {
+            let (x, y, cost) = queue[index];
+            index += 1;
+
+            if cost >= move_points {
+                continue;
+            }
+
+            let neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)];
+
+            for (nx, ny) in neighbors {
+                let in_bounds = nx >= 0 && nx < grid_cols && ny >= 0 && ny < grid_rows;
+                let already_visited = visited.contains(&(nx, ny));
+
+                if in_bounds && !already_visited {
+                    visited.push((nx, ny));
+                    queue.push((nx, ny, cost + 1));
+                }
+            }
+        }
+        visited
+    }
+}
+
 fn main() {
     // init window
     let (mut rl, thread) = raylib::init()
@@ -151,6 +191,9 @@ fn main() {
         is_selected: false,
     };
 
+    let char_grid_x = 16;
+    let char_grid_y = 10;
+
     // run window
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
@@ -171,8 +214,8 @@ fn main() {
             &mouse_click_texture,
             cursor_grid_x,
             cursor_grid_y,
-            0, // character grid x
-            0, // character grid y
+            char_grid_x,
+            char_grid_y,
             mouse_is_clicked(&rl),
         );
 
@@ -187,13 +230,27 @@ fn main() {
         for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
             d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
         }
+        let move_range = if cursor.is_selected {
+            MovementRange::compute_movement_range(char_grid_x, char_grid_y, 3, GRID_COLS, GRID_ROWS) // 3 = move points
+        } else {
+            vec![]
+        };
 
+        for (x, y) in &move_range {
+            d.draw_rectangle(
+                x * TILE_SIZE,
+                y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE,
+                Color::new(0, 100, 255, 100), // bleu semi-transparent
+            );
+        }
         d.draw_texture_pro(
             &animation.texture,
             animation.animation_frame(),
             Rectangle {
-                x: grid_to_screen_x(0) as f32,
-                y: grid_to_screen_y(0) as f32,
+                x: grid_to_screen_x(char_grid_x) as f32,
+                y: grid_to_screen_y(char_grid_y) as f32,
                 width: 128.0,
                 height: 128.0,
             },
