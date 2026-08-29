@@ -32,6 +32,12 @@ fn main() {
             "assets/humanChar/Human soldier/Human soldier/human_soldier-Idle.png",
         )
         .unwrap();
+    let human_walking_texture = rl
+        .load_texture(
+            &thread,
+            "assets/humanChar/Human soldier/Human soldier/human_soldier-Walk.png",
+        )
+        .unwrap();
 
     let mouse_normal_texture = rl
         .load_texture(&thread, "assets/cursors/PNG/01.png")
@@ -44,13 +50,25 @@ fn main() {
         .load_texture(&thread, "assets/cursors/PNG/17.png")
         .unwrap();
 
-    let mut animation = Animation {
+    let mut human_idle_animation = Animation {
         texture: human_idle_texture,
         frame_width: 130,
         frame_height: 100,
         frames_per_row: 7,
         first: 0,
         last: 6,
+        current: 0,
+        speed: 8.0,
+        duration_left: 0.1,
+    };
+
+    let mut human_walking_animation = Animation {
+        texture: human_walking_texture,
+        frame_width: 130,
+        frame_height: 100,
+        frames_per_row: 8,
+        first: 0,
+        last: 7,
         current: 0,
         speed: 8.0,
         duration_left: 0.1,
@@ -88,13 +106,14 @@ fn main() {
         move_points: 3,
         hp_points: 100,
         path: Vec::new(),
+        state: character::CharacterState::Idle,
+        facing_left: false,
     };
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
 
-        animation.animation_update(delta_time);
         character.update_position(delta_time);
         character.advance_path();
 
@@ -122,12 +141,30 @@ fn main() {
             if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
                 let mut path = vec![(cursor_grid_x, cursor_grid_y)];
                 let mut current = (cursor_grid_x, cursor_grid_y);
+                let mut waypoints = Vec::new();
                 while let Some(&parent) = came_from.get(&current) {
                     path.push(parent);
                     current = parent;
                 }
                 path.reverse();
-                character.path = path;
+
+                // recup seulement des angles droits et le met dans le path du character
+                for i in 1..path.len() - 1 {
+                    let precedente = path[i - 1];
+                    let current = path[i];
+                    let suivante = path[i + 1];
+
+                    let direction_entrante = (current.0 - precedente.0, current.1 - precedente.1);
+
+                    let direction_sortante = (suivante.0 - current.0, suivante.1 - current.1);
+
+                    if direction_entrante != direction_sortante {
+                        waypoints.push(current);
+                    }
+                }
+                waypoints.push(path[path.len() - 1]);
+                character.state = character::CharacterState::Walking;
+                character.path = waypoints;
             }
         }
 
@@ -163,9 +200,22 @@ fn main() {
                 Color::new(0, 100, 255, 100), // bleu semi-transparent
             );
         }
+
+        let current_animation = if character.state == character::CharacterState::Walking {
+            &mut human_walking_animation
+        } else {
+            &mut human_idle_animation
+        };
+        current_animation.animation_update(delta_time);
+
+        let mut source_rec = current_animation.animation_frame();
+        if character.facing_left {
+            source_rec.width = -source_rec.width;
+        }
+
         d.draw_texture_pro(
-            &animation.texture,
-            animation.animation_frame(),
+            &current_animation.texture,
+            source_rec,
             Rectangle {
                 x: character.screen_x,
                 y: character.screen_y,
