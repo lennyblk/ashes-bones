@@ -1,3 +1,4 @@
+use raylib::consts::KeyboardKey::*;
 use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
 use std::collections::HashMap;
@@ -124,7 +125,7 @@ fn main() {
         grid_y: 5,
         screen_x: grid_to_screen_x(5),
         screen_y: grid_to_screen_y(5),
-        move_points: 3,
+        move_points: 2,
         hp_points: 100,
         path: Vec::new(),
         state: character::CharacterState::Idle,
@@ -160,6 +161,10 @@ fn main() {
         let mouse_position = rl.get_mouse_position();
         fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
             rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+        }
+
+        fn cancel_pressed(rl: &RaylibHandle) -> bool {
+            rl.is_key_pressed(KEY_B)
         }
 
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
@@ -198,6 +203,11 @@ fn main() {
                 character.path = waypoints;
             }
         }
+
+        if cancel_pressed(&rl) && character.state == character::CharacterState::ChoosingPosition {
+            character.state = character::CharacterState::Idle;
+        }
+
         cursor.update_cursor(
             &mouse_normal_texture,
             &mouse_hover_texture,

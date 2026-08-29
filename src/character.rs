@@ -4,6 +4,7 @@ use crate::TILE_SIZE;
 pub enum CharacterState {
     Idle,
     Walking,
+    ChoosingPosition,
 }
 
 pub struct Character {
