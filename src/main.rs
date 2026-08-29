@@ -4,11 +4,13 @@ use std::collections::HashMap;
 mod animation;
 mod character;
 mod cursor;
+mod enemy;
 mod movement;
 
 use animation::Animation;
 use character::Character;
 use cursor::Cursors;
+use enemy::Enemy;
 use movement::MovementRange;
 
 const TILE_SIZE: i32 = 48;
@@ -39,6 +41,13 @@ fn main() {
         )
         .unwrap();
 
+    let enemy_idle_texture = rl
+        .load_texture(
+            &thread,
+            "assets/undeadChar/Undead Wraith 32x32/Undead Wraith/Wraith-Idle.png",
+        )
+        .unwrap();
+
     let mouse_normal_texture = rl
         .load_texture(&thread, "assets/cursors/PNG/01.png")
         .unwrap();
@@ -66,6 +75,18 @@ fn main() {
         texture: human_walking_texture,
         frame_width: 130,
         frame_height: 100,
+        frames_per_row: 8,
+        first: 0,
+        last: 7,
+        current: 0,
+        speed: 8.0,
+        duration_left: 0.1,
+    };
+
+    let mut enemy_idle_animation = Animation {
+        texture: enemy_idle_texture,
+        frame_width: 160,
+        frame_height: 160,
         frames_per_row: 8,
         first: 0,
         last: 7,
@@ -108,6 +129,13 @@ fn main() {
         path: Vec::new(),
         state: character::CharacterState::Idle,
         facing_left: false,
+        attack_range: 1,
+    };
+
+    let enemy = Enemy {
+        grid_x: 6,
+        grid_y: 5,
+        hp_points: 100,
     };
 
     // run window --------------------------------------------------------------
@@ -137,7 +165,10 @@ fn main() {
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
 
-        if mouse_is_clicked(&rl) && cursor.is_selected {
+        if mouse_is_clicked(&rl)
+            && cursor.is_selected
+            && character.state == character::CharacterState::Idle
+        {
             if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
                 let mut path = vec![(cursor_grid_x, cursor_grid_y)];
                 let mut current = (cursor_grid_x, cursor_grid_y);
@@ -167,7 +198,6 @@ fn main() {
                 character.path = waypoints;
             }
         }
-
         cursor.update_cursor(
             &mouse_normal_texture,
             &mouse_hover_texture,
@@ -179,6 +209,15 @@ fn main() {
             mouse_is_clicked(&rl),
         );
 
+        let mut enemy_attackable = false;
+        for (x, y) in &move_range {
+            let distance = (enemy.grid_x - x).abs() + (enemy.grid_y - y).abs();
+            if distance <= character.attack_range {
+                enemy_attackable = true;
+                break;
+            }
+        }
+
         // drawing --------------------------------------------------------------
         let mut d = rl.begin_drawing(&thread);
         d.clear_background(Color::RAYWHITE);
@@ -189,6 +228,16 @@ fn main() {
 
         for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
             d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
+        }
+
+        if enemy_attackable {
+            d.draw_rectangle(
+                enemy.grid_x * TILE_SIZE,
+                enemy.grid_y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE,
+                Color::new(255, 0, 0, 180), // cases rouge
+            );
         }
 
         for (x, y) in &move_range {
@@ -206,7 +255,10 @@ fn main() {
         } else {
             &mut human_idle_animation
         };
+
+        // l'animation doit tourner ---------------------------------------------------------------------
         current_animation.animation_update(delta_time);
+        enemy_idle_animation.animation_update(delta_time);
 
         let mut source_rec = current_animation.animation_frame();
         if character.facing_left {
@@ -219,6 +271,20 @@ fn main() {
             Rectangle {
                 x: character.screen_x,
                 y: character.screen_y,
+                width: 128.0,
+                height: 128.0,
+            },
+            Vector2::new(0.0, 0.0),
+            0.0,
+            Color::WHITE,
+        );
+
+        d.draw_texture_pro(
+            &enemy_idle_animation.texture,
+            enemy_idle_animation.animation_frame(),
+            Rectangle {
+                x: grid_to_screen_x(enemy.grid_x),
+                y: grid_to_screen_y(enemy.grid_y),
                 width: 128.0,
                 height: 128.0,
             },

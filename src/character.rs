@@ -16,6 +16,7 @@ pub struct Character {
     pub path: Vec<(i32, i32)>,
     pub state: CharacterState,
     pub facing_left: bool,
+    pub attack_range: i32,
 }
 
 impl Character {
