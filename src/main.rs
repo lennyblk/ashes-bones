@@ -57,7 +57,11 @@ fn main() {
         .unwrap();
 
     let mouse_click_texture = rl
-        .load_texture(&thread, "assets/cursors/PNG/17.png")
+        .load_texture(&thread, "assets/cursors/PNG/13.png")
+        .unwrap();
+
+    let mouse_select_texture = rl
+        .load_texture(&thread, "assets/cursors/selector_frame_v2.png")
         .unwrap();
 
     let mut human_idle_animation = Animation {
@@ -266,6 +270,18 @@ fn main() {
             &mut human_idle_animation
         };
 
+        if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
+            d.draw_texture_ex(
+                &mouse_select_texture,
+                Vector2::new(
+                    (cursor_grid_x * TILE_SIZE) as f32,
+                    (cursor_grid_y * TILE_SIZE) as f32,
+                ),
+                0.0,
+                1.0,
+                Color::WHITE,
+            );
+        }
         // l'animation doit tourner ---------------------------------------------------------------------
         current_animation.animation_update(delta_time);
         enemy_idle_animation.animation_update(delta_time);
