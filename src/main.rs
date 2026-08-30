@@ -6,6 +6,7 @@ mod animation;
 mod character;
 mod cursor;
 mod enemy;
+mod input;
 mod movement;
 
 use animation::Animation;
@@ -157,6 +158,8 @@ fn main() {
                 character.move_points,
                 GRID_COLS,
                 GRID_ROWS,
+                enemy.grid_x,
+                enemy.grid_y,
             )
         } else {
             (Vec::new(), HashMap::new())
@@ -174,38 +177,56 @@ fn main() {
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
 
-        if mouse_is_clicked(&rl)
-            && cursor.is_selected
-            && character.state == character::CharacterState::Idle
-        {
-            if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
-                let mut path = vec![(cursor_grid_x, cursor_grid_y)];
-                let mut current = (cursor_grid_x, cursor_grid_y);
-                let mut waypoints = Vec::new();
-                while let Some(&parent) = came_from.get(&current) {
-                    path.push(parent);
-                    current = parent;
-                }
-                path.reverse();
+        let mut click_consumed = false;
 
-                // recup seulement des angles droits et le met dans le path du character
-                for i in 1..path.len() - 1 {
-                    let precedente = path[i - 1];
-                    let current = path[i];
-                    let suivante = path[i + 1];
+        // if pour bouger le personnage
+        if input::handle_movement_normal_click(
+            &rl,
+            &mut character,
+            &mut cursor,
+            &move_range,
+            &came_from,
+            cursor_grid_x,
+            cursor_grid_y,
+        ) {
+            click_consumed = true;
+        }
 
-                    let direction_entrante = (current.0 - precedente.0, current.1 - precedente.1);
+        let valid_attack_positions = MovementRange::compute_attackable_positions(
+            &move_range,
+            enemy.grid_x,
+            enemy.grid_y,
+            character.attack_range,
+        );
+        let enemy_attackable = !valid_attack_positions.is_empty();
 
-                    let direction_sortante = (suivante.0 - current.0, suivante.1 - current.1);
+        // if pour attaquer l'ennemi et bouger le personnage si il y a qu'une seule case possible
+        // pour attaquer
+        if input::handle_movement_attack_click(
+            &rl,
+            &mut character,
+            &mut cursor,
+            &came_from,
+            &valid_attack_positions,
+            enemy_attackable,
+            &enemy,
+            cursor_grid_x,
+            cursor_grid_y,
+        ) {
+            click_consumed = true;
+        }
 
-                    if direction_entrante != direction_sortante {
-                        waypoints.push(current);
-                    }
-                }
-                waypoints.push(path[path.len() - 1]);
-                character.state = character::CharacterState::Walking;
-                character.path = waypoints;
-            }
+        // if pour bouger le personnage vers la case choisie pour attaquer l'ennemi
+        if input::handle_movement_choosing_position_click(
+            &rl,
+            &mut character,
+            &mut cursor,
+            &came_from,
+            &valid_attack_positions,
+            cursor_grid_x,
+            cursor_grid_y,
+        ) {
+            click_consumed = true;
         }
 
         if cancel_pressed(&rl) && character.state == character::CharacterState::ChoosingPosition {
@@ -220,17 +241,8 @@ fn main() {
             cursor_grid_y,
             character.grid_x,
             character.grid_y,
-            mouse_is_clicked(&rl),
+            mouse_is_clicked(&rl) && !click_consumed,
         );
-
-        let mut enemy_attackable = false;
-        for (x, y) in &move_range {
-            let distance = (enemy.grid_x - x).abs() + (enemy.grid_y - y).abs();
-            if distance <= character.attack_range {
-                enemy_attackable = true;
-                break;
-            }
-        }
 
         // drawing --------------------------------------------------------------
         let mut d = rl.begin_drawing(&thread);
@@ -244,16 +256,6 @@ fn main() {
             d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
         }
 
-        if enemy_attackable {
-            d.draw_rectangle(
-                enemy.grid_x * TILE_SIZE,
-                enemy.grid_y * TILE_SIZE,
-                TILE_SIZE,
-                TILE_SIZE,
-                Color::new(255, 0, 0, 180), // cases rouge
-            );
-        }
-
         for (x, y) in &move_range {
             d.draw_rectangle(
                 x * TILE_SIZE,
@@ -261,6 +263,28 @@ fn main() {
                 TILE_SIZE,
                 TILE_SIZE,
                 Color::new(0, 100, 255, 100), // bleu semi-transparent
+            );
+        }
+
+        if character.state == character::CharacterState::ChoosingPosition {
+            for (x, y) in &valid_attack_positions {
+                d.draw_rectangle(
+                    x * TILE_SIZE,
+                    y * TILE_SIZE,
+                    TILE_SIZE,
+                    TILE_SIZE,
+                    Color::new(255, 255, 0, 170), // jaune semi-transparent
+                );
+            }
+        }
+
+        if enemy_attackable {
+            d.draw_rectangle(
+                enemy.grid_x * TILE_SIZE,
+                enemy.grid_y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE,
+                Color::new(255, 0, 0, 180), // cases rouge
             );
         }
 

@@ -30,13 +30,13 @@ impl Character {
 
         // abs (recup la valeur absolu de la distance restante) pour recup toujours un valeur positif que j'aille a gauche ou a droite, comme ca je snap pas trop tot si c'est negatif
         if distance_x.abs() > 1.0 {
-            self.screen_x += distance_x * delta_time * 2.6; // le chiffre est la vitesse de déplacement
+            self.screen_x += distance_x * delta_time * 3.0; // le chiffre est la vitesse de déplacement
         } else {
             self.screen_x = target_x as f32;
         }
 
         if distance_y.abs() > 1.0 {
-            self.screen_y += distance_y * delta_time * 2.6;
+            self.screen_y += distance_y * delta_time * 3.0;
         } else {
             self.screen_y = target_y as f32;
         }
