@@ -1,4 +1,3 @@
-use raylib::consts::KeyboardKey::*;
 use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
 use std::collections::HashMap;
@@ -170,9 +169,7 @@ fn main() {
             rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
         }
 
-        fn cancel_pressed(rl: &RaylibHandle) -> bool {
-            rl.is_key_pressed(KEY_B)
-        }
+        input::cancel_pressed(&rl);
 
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
@@ -229,7 +226,9 @@ fn main() {
             click_consumed = true;
         }
 
-        if cancel_pressed(&rl) && character.state == character::CharacterState::ChoosingPosition {
+        if input::cancel_pressed(&rl)
+            && character.state == character::CharacterState::ChoosingPosition
+        {
             character.state = character::CharacterState::Idle;
         }
 

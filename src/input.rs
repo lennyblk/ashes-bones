@@ -2,6 +2,7 @@ use crate::character::{Character, CharacterState};
 use crate::cursor::Cursors;
 use crate::enemy::{self, Enemy};
 use crate::movement::MovementRange;
+use raylib::consts::KeyboardKey::*;
 use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
 use std::collections::HashMap;
@@ -98,4 +99,8 @@ pub fn handle_movement_choosing_position_click(
         return true;
     }
     false
+}
+
+pub fn cancel_pressed(rl: &RaylibHandle) -> bool {
+    rl.is_key_pressed(KEY_B)
 }
