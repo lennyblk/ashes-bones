@@ -4,6 +4,7 @@ use crate::TILE_SIZE;
 pub enum CharacterState {
     Idle,
     Walking,
+    Combat,
     ChoosingPosition,
 }
 
@@ -18,6 +19,9 @@ pub struct Character {
     pub state: CharacterState,
     pub facing_left: bool,
     pub attack_range: i32,
+    pub attack_power: i32,
+    pub defense: i32,
+    pub attack_target: bool,
 }
 
 impl Character {
@@ -54,7 +58,11 @@ impl Character {
         {
             self.path.remove(0);
             if self.path.is_empty() {
-                self.state = CharacterState::Idle;
+                if self.attack_target {
+                    self.state = CharacterState::Combat;
+                } else {
+                    self.state = CharacterState::Idle;
+                }
             }
             return;
         }

@@ -1,13 +1,11 @@
 use crate::character::{Character, CharacterState};
 use crate::cursor::Cursors;
-use crate::enemy::{self, Enemy};
+use crate::enemy::Enemy;
 use crate::movement::MovementRange;
 use raylib::consts::KeyboardKey::*;
 use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
 use std::collections::HashMap;
-
-const TILE_SIZE: i32 = 48;
 
 pub fn handle_movement_normal_click(
     rl: &RaylibHandle,
@@ -29,6 +27,7 @@ pub fn handle_movement_normal_click(
                 (cursor_grid_x, cursor_grid_y),
             );
             character.state = CharacterState::Walking;
+            character.attack_target = false;
             character.path = waypoints;
             cursor.is_selected = false;
             return true;
@@ -59,12 +58,14 @@ pub fn handle_movement_attack_click(
             (enemy.grid_x - character.grid_x).abs() + (enemy.grid_y - character.grid_y).abs();
         if current_distance <= character.attack_range {
             cursor.is_selected = false;
+            character.state = CharacterState::Combat;
         } else if valid_attack_positions.len() == 1 {
             let waypoints = MovementRange::build_waypoints(
                 came_from,
                 (character.grid_x, character.grid_y),
                 valid_attack_positions[0],
             );
+            character.attack_target = true;
             character.state = CharacterState::Walking;
             character.path = waypoints;
         } else {
@@ -93,6 +94,7 @@ pub fn handle_movement_choosing_position_click(
             (character.grid_x, character.grid_y),
             (cursor_grid_x, cursor_grid_y),
         );
+        character.attack_target = true;
         character.state = CharacterState::Walking;
         character.path = waypoints;
         cursor.is_selected = false;

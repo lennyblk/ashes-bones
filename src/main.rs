@@ -3,6 +3,7 @@ use raylib::prelude::*;
 use std::collections::HashMap;
 mod animation;
 mod character;
+mod combat;
 mod cursor;
 mod enemy;
 mod input;
@@ -135,12 +136,16 @@ fn main() {
         state: character::CharacterState::Idle,
         facing_left: false,
         attack_range: 1,
+        attack_power: 20,
+        defense: 5,
+        attack_target: false,
     };
 
-    let enemy = Enemy {
+    let mut enemy = Enemy {
         grid_x: 6,
         grid_y: 5,
         hp_points: 100,
+        defense: 10,
     };
 
     // run window --------------------------------------------------------------
@@ -149,6 +154,17 @@ fn main() {
 
         character.update_position(delta_time);
         character.advance_path();
+
+        // attack vers l'enemy quand je suis en state Combat
+        if character.state == character::CharacterState::Combat {
+            enemy.hp_points -= combat::attack_damage_dealt(character.attack_power, enemy.defense);
+            if enemy.hp_points < 0 {
+                enemy.hp_points = 0;
+            }
+            character.state = character::CharacterState::Idle;
+            character.attack_target = false;
+            println!("Enemy HP: {}", enemy.hp_points);
+        }
 
         let (move_range, came_from) = if cursor.is_selected {
             MovementRange::compute_movement_range(
