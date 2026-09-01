@@ -68,6 +68,7 @@ pub fn handle_movement_attack_click(
             character.attack_target = true;
             character.state = CharacterState::Walking;
             character.path = waypoints;
+            cursor.is_selected = false;
         } else {
             character.state = CharacterState::ChoosingPosition;
         }
