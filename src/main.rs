@@ -43,6 +43,13 @@ fn main() {
         )
         .unwrap();
 
+    let human_attack_texture = rl
+        .load_texture(
+            &thread,
+            "assets/humanChar/Human soldier/Human soldier/human_soldier-Attact 1.png",
+        )
+        .unwrap();
+
     let enemy_idle_texture = rl
         .load_texture(
             &thread,
@@ -75,6 +82,8 @@ fn main() {
         current: 0,
         speed: 8.0,
         duration_left: 0.1,
+        finished: false,
+        looping: true,
     };
 
     let mut human_walking_animation = Animation {
@@ -87,6 +96,22 @@ fn main() {
         current: 0,
         speed: 8.0,
         duration_left: 0.1,
+        finished: false,
+        looping: true,
+    };
+
+    let mut human_attack_animation = Animation {
+        texture: human_attack_texture,
+        frame_width: 130,
+        frame_height: 100,
+        frames_per_row: 7,
+        first: 0,
+        last: 6,
+        current: 0,
+        speed: 8.0,
+        duration_left: 0.1,
+        finished: false,
+        looping: false,
     };
 
     let mut enemy_idle_animation = Animation {
@@ -99,6 +124,8 @@ fn main() {
         current: 0,
         speed: 8.0,
         duration_left: 0.1,
+        finished: false,
+        looping: true,
     };
 
     fn grid_to_screen_x(grid_x: i32) -> f32 {
@@ -149,6 +176,8 @@ fn main() {
         is_alive: true,
     };
 
+    let mut attack_animation_started = false;
+
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
@@ -156,20 +185,36 @@ fn main() {
         character.update_position(delta_time);
         character.advance_path();
 
+        if character.state == character::CharacterState::Combat && !attack_animation_started {
+            human_attack_animation.current = 0;
+            human_attack_animation.finished = false;
+            attack_animation_started = true;
+
+            if character.grid_x < enemy.grid_x {
+                character.facing_left = false;
+            } else {
+                character.facing_left = true;
+            }
+        }
+
         // attack vers l'enemy quand je suis en state Combat
         if character.state == character::CharacterState::Combat {
-            enemy.hp_points -= combat::attack_damage_dealt(character.attack_power, enemy.defense);
+            if human_attack_animation.finished {
+                enemy.hp_points -=
+                    combat::attack_damage_dealt(character.attack_power, enemy.defense);
 
-            if enemy.hp_points < 0 {
-                enemy.hp_points = 0;
-            }
-            if enemy.hp_points == 0 {
-                enemy.is_alive = false;
-            }
+                if enemy.hp_points < 0 {
+                    enemy.hp_points = 0;
+                }
+                if enemy.hp_points == 0 {
+                    enemy.is_alive = false;
+                }
 
-            character.state = character::CharacterState::Idle;
-            character.attack_target = false;
-            println!("Enemy HP: {}", enemy.hp_points);
+                character.state = character::CharacterState::Idle;
+                character.attack_target = false;
+                attack_animation_started = false;
+                println!("Enemy HP: {}", enemy.hp_points);
+            }
         }
 
         let (move_range, came_from) = if cursor.is_selected {
@@ -311,10 +356,11 @@ fn main() {
             );
         }
 
-        let current_animation = if character.state == character::CharacterState::Walking {
-            &mut human_walking_animation
-        } else {
-            &mut human_idle_animation
+        let current_animation = match character.state {
+            character::CharacterState::Idle => &mut human_idle_animation,
+            character::CharacterState::Walking => &mut human_walking_animation,
+            character::CharacterState::Combat => &mut human_attack_animation,
+            character::CharacterState::ChoosingPosition => &mut human_idle_animation,
         };
 
         if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {

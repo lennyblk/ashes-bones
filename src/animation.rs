@@ -10,6 +10,8 @@ pub struct Animation {
     pub current: i32,
     pub speed: f32,
     pub duration_left: f32,
+    pub finished: bool,
+    pub looping: bool,
 }
 
 impl Animation {
@@ -18,8 +20,17 @@ impl Animation {
 
         if self.duration_left <= 0.0 {
             self.current += 1;
-            if self.current > self.last {
-                self.current = self.first;
+
+            if self.looping == true {
+                if self.current > self.last {
+                    self.current = self.first;
+                }
+            } else {
+                // self.looping == false
+                if self.current > self.last {
+                    self.current = self.last;
+                    self.finished = true;
+                }
             }
             self.duration_left = 1.0 / self.speed;
         }
