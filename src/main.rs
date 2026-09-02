@@ -146,6 +146,7 @@ fn main() {
         grid_y: 5,
         hp_points: 100,
         defense: 10,
+        is_alive: true,
     };
 
     // run window --------------------------------------------------------------
@@ -158,9 +159,14 @@ fn main() {
         // attack vers l'enemy quand je suis en state Combat
         if character.state == character::CharacterState::Combat {
             enemy.hp_points -= combat::attack_damage_dealt(character.attack_power, enemy.defense);
+
             if enemy.hp_points < 0 {
                 enemy.hp_points = 0;
             }
+            if enemy.hp_points == 0 {
+                enemy.is_alive = false;
+            }
+
             character.state = character::CharacterState::Idle;
             character.attack_target = false;
             println!("Enemy HP: {}", enemy.hp_points);
@@ -175,6 +181,7 @@ fn main() {
                 GRID_ROWS,
                 enemy.grid_x,
                 enemy.grid_y,
+                &enemy,
             )
         } else {
             (Vec::new(), HashMap::new())
@@ -210,6 +217,7 @@ fn main() {
             enemy.grid_x,
             enemy.grid_y,
             character.attack_range,
+            &enemy,
         );
         let enemy_attackable = !valid_attack_positions.is_empty();
 
@@ -344,19 +352,21 @@ fn main() {
             Color::WHITE,
         );
 
-        d.draw_texture_pro(
-            &enemy_idle_animation.texture,
-            enemy_idle_animation.animation_frame(),
-            Rectangle {
-                x: grid_to_screen_x(enemy.grid_x),
-                y: grid_to_screen_y(enemy.grid_y),
-                width: 128.0,
-                height: 128.0,
-            },
-            Vector2::new(0.0, 0.0),
-            0.0,
-            Color::WHITE,
-        );
+        if enemy.is_alive {
+            d.draw_texture_pro(
+                &enemy_idle_animation.texture,
+                enemy_idle_animation.animation_frame(),
+                Rectangle {
+                    x: grid_to_screen_x(enemy.grid_x),
+                    y: grid_to_screen_y(enemy.grid_y),
+                    width: 128.0,
+                    height: 128.0,
+                },
+                Vector2::new(0.0, 0.0),
+                0.0,
+                Color::WHITE,
+            );
+        }
 
         d.draw_texture_ex(
             cursor.current_cursor_texture,
