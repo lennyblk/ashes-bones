@@ -1,4 +1,5 @@
 use crate::enemy::Enemy;
+use crate::enemy::EnemyState::Dead;
 use std::collections::HashMap;
 
 pub struct MovementRange {
@@ -36,7 +37,7 @@ impl MovementRange {
                 let already_visited = visited.contains(&(nx, ny));
                 let is_enemy = nx == enemy_x && ny == enemy_y;
 
-                let is_blocked_by_enemy = is_enemy && enemy.is_alive;
+                let is_blocked_by_enemy = is_enemy && enemy.state != Dead;
 
                 if in_bounds && !already_visited && !is_blocked_by_enemy {
                     visited.push((nx, ny));
@@ -57,7 +58,7 @@ impl MovementRange {
     ) -> Vec<(i32, i32)> {
         let mut valid_attack_positions: Vec<(i32, i32)> = Vec::new();
 
-        if !enemy.is_alive {
+        if enemy.state == Dead {
             return valid_attack_positions;
         }
 
