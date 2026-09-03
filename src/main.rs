@@ -1,8 +1,8 @@
 use raylib::consts::MouseButton::*;
-use raylib::ffi::CSSPalette;
 use raylib::prelude::*;
 use std::collections::HashMap;
 mod animation;
+mod assets;
 mod character;
 mod combat;
 mod cursor;
@@ -10,7 +10,6 @@ mod enemy;
 mod input;
 mod movement;
 
-use animation::Animation;
 use character::Character;
 use cursor::Cursors;
 use enemy::Enemy;
@@ -30,146 +29,7 @@ fn main() {
         .build();
     rl.hide_cursor();
 
-    //load texture
-    let human_idle_texture = rl
-        .load_texture(
-            &thread,
-            "assets/humanChar/Human soldier/Human soldier/human_soldier-Idle.png",
-        )
-        .unwrap();
-    let human_walking_texture = rl
-        .load_texture(
-            &thread,
-            "assets/humanChar/Human soldier/Human soldier/human_soldier-Walk.png",
-        )
-        .unwrap();
-
-    let human_attack_texture = rl
-        .load_texture(
-            &thread,
-            "assets/humanChar/Human soldier/Human soldier/human_soldier-Attact 1.png",
-        )
-        .unwrap();
-
-    let enemy_idle_texture = rl
-        .load_texture(
-            &thread,
-            "assets/undeadChar/Undead Wraith 32x32/Undead Wraith/Wraith-Idle.png",
-        )
-        .unwrap();
-
-    let enemy_hurt_texture = rl
-        .load_texture(
-            &thread,
-            "assets/undeadChar/Undead Wraith 32x32/Undead Wraith_split shadows/Wraith-Hurt.png",
-        )
-        .unwrap();
-
-    let enemy_dying_texture = rl
-        .load_texture(
-            &thread,
-            "assets/undeadChar/Undead Wraith 32x32/Undead Wraith_split shadows/Wraith-Die.png",
-        )
-        .unwrap();
-
-    let mouse_normal_texture = rl
-        .load_texture(&thread, "assets/cursors/PNG/01.png")
-        .unwrap();
-    let mouse_hover_texture = rl
-        .load_texture(&thread, "assets/cursors/PNG/10.png")
-        .unwrap();
-
-    let mouse_click_texture = rl
-        .load_texture(&thread, "assets/cursors/PNG/13.png")
-        .unwrap();
-
-    let mouse_select_texture = rl
-        .load_texture(&thread, "assets/cursors/selector_frame_v2.png")
-        .unwrap();
-
-    let mut human_idle_animation = Animation {
-        texture: human_idle_texture,
-        frame_width: 130,
-        frame_height: 100,
-        frames_per_row: 7,
-        first: 0,
-        last: 6,
-        current: 0,
-        speed: 8.0,
-        duration_left: 0.1,
-        finished: false,
-        looping: true,
-    };
-
-    let mut human_walking_animation = Animation {
-        texture: human_walking_texture,
-        frame_width: 130,
-        frame_height: 100,
-        frames_per_row: 8,
-        first: 0,
-        last: 7,
-        current: 0,
-        speed: 8.0,
-        duration_left: 0.1,
-        finished: false,
-        looping: true,
-    };
-
-    let mut human_attack_animation = Animation {
-        texture: human_attack_texture,
-        frame_width: 130,
-        frame_height: 100,
-        frames_per_row: 7,
-        first: 0,
-        last: 6,
-        current: 0,
-        speed: 8.0,
-        duration_left: 0.1,
-        finished: false,
-        looping: false,
-    };
-
-    let mut enemy_idle_animation = Animation {
-        texture: enemy_idle_texture,
-        frame_width: 160,
-        frame_height: 160,
-        frames_per_row: 8,
-        first: 0,
-        last: 7,
-        current: 0,
-        speed: 8.0,
-        duration_left: 0.1,
-        finished: false,
-        looping: true,
-    };
-
-    let mut enemy_hurt_animation = Animation {
-        texture: enemy_hurt_texture,
-        frame_width: 160,
-        frame_height: 160,
-        frames_per_row: 6,
-        first: 0,
-        last: 5,
-        current: 0,
-        speed: 8.0,
-        duration_left: 0.1,
-        finished: false,
-        looping: false,
-    };
-
-    let mut enemy_dying_animation = Animation {
-        texture: enemy_dying_texture,
-        frame_width: 160,
-        frame_height: 160,
-        frames_per_row: 8,
-        first: 0,
-        last: 7,
-        current: 0,
-        speed: 8.0,
-        duration_left: 0.1,
-        finished: false,
-        looping: false,
-    };
+    let mut assets = assets::load_assets(&mut rl, &thread);
 
     fn grid_to_screen_x(grid_x: i32) -> f32 {
         let x = (grid_x * TILE_SIZE) as f32 + (-40.0);
@@ -187,7 +47,7 @@ fn main() {
     let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
 
     let mut cursor = Cursors {
-        current_cursor_texture: &mouse_normal_texture,
+        current_cursor_texture: &assets.mouse_normal_texture,
         position: Vector2::new(
             (cursor_grid_x * TILE_SIZE) as f32,
             (cursor_grid_y * TILE_SIZE) as f32,
@@ -229,58 +89,27 @@ fn main() {
         character.update_position(delta_time);
         character.advance_path();
 
-        if character.state == character::CharacterState::Combat && !attack_animation_started {
-            human_attack_animation.current = 0;
-            human_attack_animation.finished = false;
-            attack_animation_started = true;
+        combat::start_attack_if_needed(
+            &mut character,
+            &mut enemy,
+            &mut assets.human_attack_animation,
+            &mut attack_animation_started,
+        );
 
-            if character.grid_x < enemy.grid_x {
-                character.facing_left = false;
-                enemy.facing_left = true;
-            } else {
-                character.facing_left = true;
-                enemy.facing_left = false;
-            }
-        }
-
-        // attack vers l'enemy quand je suis en state Combat
-        if character.state == character::CharacterState::Combat {
-            if human_attack_animation.finished {
-                enemy.hp_points -=
-                    combat::attack_damage_dealt(character.attack_power, enemy.defense);
-                if enemy.hp_points < 0 {
-                    enemy.hp_points = 0;
-                }
-                enemy_hurt_animation.current = 0;
-                enemy_hurt_animation.finished = false;
-                enemy.state = enemy::EnemyState::Hurt;
-
-                character.state = character::CharacterState::Idle;
-                character.attack_target = false;
-                attack_animation_started = false;
-                println!("Enemy HP: {}", enemy.hp_points);
-            }
-        }
-
-        if enemy.state == enemy::EnemyState::Hurt {
-            enemy_hurt_animation.animation_update(delta_time);
-            if enemy_hurt_animation.finished {
-                if enemy.hp_points == 0 {
-                    enemy_dying_animation.current = 0;
-                    enemy_dying_animation.finished = false;
-                    enemy.state = enemy::EnemyState::Dying;
-                } else {
-                    enemy.state = enemy::EnemyState::Idle;
-                }
-            }
-        }
-
-        if enemy.state == enemy::EnemyState::Dying {
-            enemy_dying_animation.animation_update(delta_time);
-            if enemy_dying_animation.finished {
-                enemy.state = enemy::EnemyState::Dead;
-            }
-        }
+        combat::resolve_attack(
+            &mut character,
+            &mut enemy,
+            &assets.human_attack_animation,
+            &mut assets.enemy_hurt_animation,
+            &mut attack_animation_started,
+        );
+        combat::update_hurt_state(
+            &mut enemy,
+            delta_time,
+            &mut assets.enemy_hurt_animation,
+            &mut assets.enemy_dying_animation,
+        );
+        combat::update_dying_state(&mut enemy, delta_time, &mut assets.enemy_dying_animation);
 
         let (move_range, came_from) = if cursor.is_selected {
             MovementRange::compute_movement_range(
@@ -367,9 +196,9 @@ fn main() {
         }
 
         cursor.update_cursor(
-            &mouse_normal_texture,
-            &mouse_hover_texture,
-            &mouse_click_texture,
+            &assets.mouse_normal_texture,
+            &assets.mouse_hover_texture,
+            &assets.mouse_click_texture,
             cursor_grid_x,
             cursor_grid_y,
             character.grid_x,
@@ -422,22 +251,22 @@ fn main() {
         }
 
         let current_animation = match character.state {
-            character::CharacterState::Idle => &mut human_idle_animation,
-            character::CharacterState::Walking => &mut human_walking_animation,
-            character::CharacterState::Combat => &mut human_attack_animation,
-            character::CharacterState::ChoosingPosition => &mut human_idle_animation,
+            character::CharacterState::Idle => &mut assets.human_idle_animation,
+            character::CharacterState::Walking => &mut assets.human_walking_animation,
+            character::CharacterState::Combat => &mut assets.human_attack_animation,
+            character::CharacterState::ChoosingPosition => &mut assets.human_idle_animation,
         };
 
         let current_enemy_animation = match enemy.state {
-            enemy::EnemyState::Idle => &mut enemy_idle_animation,
-            enemy::EnemyState::Hurt => &mut enemy_hurt_animation,
-            enemy::EnemyState::Dying => &mut enemy_dying_animation,
-            enemy::EnemyState::Dead => &mut enemy_idle_animation,
+            enemy::EnemyState::Idle => &mut assets.enemy_idle_animation,
+            enemy::EnemyState::Hurt => &mut assets.enemy_hurt_animation,
+            enemy::EnemyState::Dying => &mut assets.enemy_dying_animation,
+            enemy::EnemyState::Dead => &mut assets.enemy_idle_animation,
         };
 
         if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
             d.draw_texture_ex(
-                &mouse_select_texture,
+                &assets.mouse_select_texture,
                 Vector2::new(
                     (cursor_grid_x * TILE_SIZE) as f32,
                     (cursor_grid_y * TILE_SIZE) as f32,
