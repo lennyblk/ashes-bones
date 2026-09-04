@@ -22,6 +22,7 @@ pub struct Character {
     pub attack_power: i32,
     pub defense: i32,
     pub attack_target: bool,
+    pub hp_max_points: i32,
 }
 
 impl Character {

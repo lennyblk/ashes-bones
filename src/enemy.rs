@@ -13,4 +13,5 @@ pub struct Enemy {
     pub defense: i32,
     pub state: EnemyState,
     pub facing_left: bool,
+    pub max_hp_points: i32,
 }

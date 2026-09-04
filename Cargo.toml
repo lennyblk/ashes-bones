@@ -5,3 +5,8 @@ edition = "2024"
 
 [dependencies]
 raylib = "6.0.0"
+
+[lints.clippy]
+style = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"

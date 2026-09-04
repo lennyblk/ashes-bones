@@ -9,6 +9,7 @@ mod cursor;
 mod enemy;
 mod input;
 mod movement;
+mod ui;
 
 use character::Character;
 use cursor::Cursors;
@@ -69,6 +70,7 @@ fn main() {
         attack_power: 20,
         defense: 5,
         attack_target: false,
+        hp_max_points: 100,
     };
 
     let mut enemy = Enemy {
@@ -78,6 +80,7 @@ fn main() {
         defense: 10,
         state: enemy::EnemyState::Idle,
         facing_left: false,
+        max_hp_points: 100,
     };
 
     let mut attack_animation_started = false;
@@ -208,7 +211,7 @@ fn main() {
 
         // drawing --------------------------------------------------------------
         let mut d = rl.begin_drawing(&thread);
-        d.clear_background(Color::DARKGREEN);
+        d.clear_background(Color::RAYWHITE);
 
         for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
             d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
