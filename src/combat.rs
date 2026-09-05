@@ -1,6 +1,7 @@
 use crate::animation::Animation;
 use crate::character::{Character, CharacterState};
 use crate::enemy::{Enemy, EnemyState};
+use crate::game_mode::GameMode;
 
 pub fn attack_damage_dealt(attack_power: i32, defense: i32) -> i32 {
     let reduction = defense as f32 / 100.0;
@@ -13,8 +14,10 @@ pub fn start_attack_if_needed(
     enemy: &mut Enemy,
     human_attack_animation: &mut Animation,
     attack_animation_started: &mut bool,
+    game_mode: &mut GameMode,
 ) {
     if character.state == CharacterState::Combat && !*attack_animation_started {
+        *game_mode = GameMode::CombatScreen;
         human_attack_animation.current = 0;
         human_attack_animation.finished = false;
         *attack_animation_started = true;
@@ -57,6 +60,7 @@ pub fn update_hurt_state(
     delta_time: f32,
     enemy_hurt_animation: &mut Animation,
     enemy_dying_animation: &mut Animation,
+    game_mode: &mut GameMode,
 ) {
     if enemy.state == EnemyState::Hurt {
         enemy_hurt_animation.animation_update(delta_time);
@@ -67,6 +71,7 @@ pub fn update_hurt_state(
                 enemy.state = EnemyState::Dying;
             } else {
                 enemy.state = EnemyState::Idle;
+                *game_mode = GameMode::GridScreen;
             }
         }
     }
@@ -76,11 +81,13 @@ pub fn update_dying_state(
     enemy: &mut Enemy,
     delta_time: f32,
     enemy_dying_animation: &mut Animation,
+    game_mode: &mut GameMode,
 ) {
     if enemy.state == EnemyState::Dying {
         enemy_dying_animation.animation_update(delta_time);
         if enemy_dying_animation.finished {
             enemy.state = EnemyState::Dead;
+            *game_mode = GameMode::GridScreen;
         }
     }
 }

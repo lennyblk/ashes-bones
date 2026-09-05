@@ -7,6 +7,7 @@ mod character;
 mod combat;
 mod cursor;
 mod enemy;
+mod game_mode;
 mod input;
 mod movement;
 mod ui;
@@ -84,6 +85,7 @@ fn main() {
     };
 
     let mut attack_animation_started = false;
+    let mut game_mode = game_mode::GameMode::GridScreen;
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -97,6 +99,7 @@ fn main() {
             &mut enemy,
             &mut assets.human_attack_animation,
             &mut attack_animation_started,
+            &mut game_mode,
         );
 
         combat::resolve_attack(
@@ -111,8 +114,14 @@ fn main() {
             delta_time,
             &mut assets.enemy_hurt_animation,
             &mut assets.enemy_dying_animation,
+            &mut game_mode,
         );
-        combat::update_dying_state(&mut enemy, delta_time, &mut assets.enemy_dying_animation);
+        combat::update_dying_state(
+            &mut enemy,
+            delta_time,
+            &mut assets.enemy_dying_animation,
+            &mut game_mode,
+        );
 
         let (move_range, came_from) = if cursor.is_selected {
             MovementRange::compute_movement_range(
@@ -209,50 +218,7 @@ fn main() {
             mouse_is_clicked(&rl) && !click_consumed,
         );
 
-        // drawing --------------------------------------------------------------
-        let mut d = rl.begin_drawing(&thread);
-        d.clear_background(Color::RAYWHITE);
-
-        for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
-            d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
-        }
-
-        for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
-            d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
-        }
-
-        for (x, y) in &move_range {
-            d.draw_rectangle(
-                x * TILE_SIZE,
-                y * TILE_SIZE,
-                TILE_SIZE,
-                TILE_SIZE,
-                Color::new(0, 100, 255, 100), // bleu semi-transparent
-            );
-        }
-
-        if character.state == character::CharacterState::ChoosingPosition {
-            for (x, y) in &valid_attack_positions {
-                d.draw_rectangle(
-                    x * TILE_SIZE,
-                    y * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE,
-                    Color::new(255, 255, 0, 170), // jaune semi-transparent
-                );
-            }
-        }
-
-        if enemy_attackable {
-            d.draw_rectangle(
-                enemy.grid_x * TILE_SIZE,
-                enemy.grid_y * TILE_SIZE,
-                TILE_SIZE,
-                TILE_SIZE,
-                Color::new(255, 0, 0, 180), // cases rouge
-            );
-        }
-
+        // animations communes aux deux modes -----------------------------------
         let current_animation = match character.state {
             character::CharacterState::Idle => &mut assets.human_idle_animation,
             character::CharacterState::Walking => &mut assets.human_walking_animation,
@@ -267,19 +233,6 @@ fn main() {
             enemy::EnemyState::Dead => &mut assets.enemy_idle_animation,
         };
 
-        if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
-            d.draw_texture_ex(
-                &assets.mouse_select_texture,
-                Vector2::new(
-                    (cursor_grid_x * TILE_SIZE) as f32,
-                    (cursor_grid_y * TILE_SIZE) as f32,
-                ),
-                0.0,
-                1.0,
-                Color::WHITE,
-            );
-        }
-        // l'animation doit tourner ---------------------------------------------------------------------
         current_animation.animation_update(delta_time);
         current_enemy_animation.animation_update(delta_time);
 
@@ -294,27 +247,72 @@ fn main() {
             source_rec_enemy.width = -source_rec_enemy.width;
         }
 
-        d.draw_texture_pro(
-            &current_animation.texture,
-            source_rec_character,
-            Rectangle {
-                x: character.screen_x,
-                y: character.screen_y,
-                width: 128.0,
-                height: 128.0,
-            },
-            Vector2::new(0.0, 0.0),
-            0.0,
-            Color::WHITE,
-        );
+        // drawing --------------------------------------------------------------
+        let mut d = rl.begin_drawing(&thread);
 
-        if enemy.state != enemy::EnemyState::Dead {
+        // Grid screen mode ------------------------------------------------------
+        if game_mode == game_mode::GameMode::GridScreen {
+            d.clear_background(Color::RAYWHITE);
+
+            for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
+                d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
+            }
+
+            for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
+                d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
+            }
+
+            for (x, y) in &move_range {
+                d.draw_rectangle(
+                    x * TILE_SIZE,
+                    y * TILE_SIZE,
+                    TILE_SIZE,
+                    TILE_SIZE,
+                    Color::new(0, 100, 255, 100),
+                );
+            }
+
+            if character.state == character::CharacterState::ChoosingPosition {
+                for (x, y) in &valid_attack_positions {
+                    d.draw_rectangle(
+                        x * TILE_SIZE,
+                        y * TILE_SIZE,
+                        TILE_SIZE,
+                        TILE_SIZE,
+                        Color::new(255, 255, 0, 170),
+                    );
+                }
+            }
+
+            if enemy_attackable {
+                d.draw_rectangle(
+                    enemy.grid_x * TILE_SIZE,
+                    enemy.grid_y * TILE_SIZE,
+                    TILE_SIZE,
+                    TILE_SIZE,
+                    Color::new(255, 0, 0, 180),
+                );
+            }
+
+            if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
+                d.draw_texture_ex(
+                    &assets.mouse_select_texture,
+                    Vector2::new(
+                        (cursor_grid_x * TILE_SIZE) as f32,
+                        (cursor_grid_y * TILE_SIZE) as f32,
+                    ),
+                    0.0,
+                    1.0,
+                    Color::WHITE,
+                );
+            }
+
             d.draw_texture_pro(
-                &current_enemy_animation.texture,
-                source_rec_enemy,
+                &current_animation.texture,
+                source_rec_character,
                 Rectangle {
-                    x: grid_to_screen_x(enemy.grid_x),
-                    y: grid_to_screen_y(enemy.grid_y),
+                    x: character.screen_x,
+                    y: character.screen_y,
                     width: 128.0,
                     height: 128.0,
                 },
@@ -322,14 +320,73 @@ fn main() {
                 0.0,
                 Color::WHITE,
             );
-        }
 
-        d.draw_texture_ex(
-            cursor.current_cursor_texture,
-            Vector2::new(mouse_position.x, mouse_position.y),
-            0.0,
-            0.7,
-            Color::WHITE,
-        );
+            if enemy.state != enemy::EnemyState::Dead {
+                d.draw_texture_pro(
+                    &current_enemy_animation.texture,
+                    source_rec_enemy,
+                    Rectangle {
+                        x: grid_to_screen_x(enemy.grid_x),
+                        y: grid_to_screen_y(enemy.grid_y),
+                        width: 128.0,
+                        height: 128.0,
+                    },
+                    Vector2::new(0.0, 0.0),
+                    0.0,
+                    Color::WHITE,
+                );
+            }
+
+            d.draw_texture_ex(
+                cursor.current_cursor_texture,
+                Vector2::new(mouse_position.x, mouse_position.y),
+                0.0,
+                0.7,
+                Color::WHITE,
+            );
+        } else {
+            // écran de combat --------------------------------------------------
+            d.clear_background(Color::new(30, 30, 30, 255));
+
+            let left_x = SCREEN_WIDTH as f32 / 4.0 - 64.0;
+            let right_x = SCREEN_WIDTH as f32 * 3.0 / 4.0 - 64.0;
+            let combat_y = SCREEN_HEIGHT as f32 / 2.0 - 64.0;
+
+            let (character_combat_x, enemy_combat_x) = if character.facing_left {
+                (right_x, left_x)
+            } else {
+                (left_x, right_x)
+            };
+
+            d.draw_texture_pro(
+                &current_animation.texture,
+                source_rec_character,
+                Rectangle {
+                    x: character_combat_x,
+                    y: combat_y,
+                    width: 128.0,
+                    height: 128.0,
+                },
+                Vector2::new(0.0, 0.0),
+                0.0,
+                Color::WHITE,
+            );
+
+            if enemy.state != enemy::EnemyState::Dead {
+                d.draw_texture_pro(
+                    &current_enemy_animation.texture,
+                    source_rec_enemy,
+                    Rectangle {
+                        x: enemy_combat_x,
+                        y: combat_y,
+                        width: 128.0,
+                        height: 128.0,
+                    },
+                    Vector2::new(0.0, 0.0),
+                    0.0,
+                    Color::WHITE,
+                );
+            }
+        }
     }
 }
