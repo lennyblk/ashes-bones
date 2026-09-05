@@ -348,9 +348,14 @@ fn main() {
             // écran de combat --------------------------------------------------
             d.clear_background(Color::new(30, 30, 30, 255));
 
-            let left_x = SCREEN_WIDTH as f32 / 4.0 - 64.0;
-            let right_x = SCREEN_WIDTH as f32 * 3.0 / 4.0 - 64.0;
-            let combat_y = SCREEN_HEIGHT as f32 / 2.0 - 64.0;
+            let sprite_size = 500.0;
+            let overlap = 180.0; // à ajuster : plus grand = plus collés/superposés
+
+            let center_x = SCREEN_WIDTH as f32 / 2.0;
+            let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
+
+            let left_x = center_x - sprite_size + overlap;
+            let right_x = center_x - overlap;
 
             let (character_combat_x, enemy_combat_x) = if character.facing_left {
                 (right_x, left_x)
@@ -364,8 +369,8 @@ fn main() {
                 Rectangle {
                     x: character_combat_x,
                     y: combat_y,
-                    width: 128.0,
-                    height: 128.0,
+                    width: sprite_size,
+                    height: sprite_size,
                 },
                 Vector2::new(0.0, 0.0),
                 0.0,
@@ -379,8 +384,8 @@ fn main() {
                     Rectangle {
                         x: enemy_combat_x,
                         y: combat_y,
-                        width: 128.0,
-                        height: 128.0,
+                        width: sprite_size,
+                        height: sprite_size,
                     },
                     Vector2::new(0.0, 0.0),
                     0.0,
