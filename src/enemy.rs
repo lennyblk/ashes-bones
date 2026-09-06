@@ -4,6 +4,7 @@ pub enum EnemyState {
     Dying,
     Dead,
     Hurt,
+    CombatEntering,
 }
 
 pub struct Enemy {

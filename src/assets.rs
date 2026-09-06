@@ -6,6 +6,7 @@ pub struct Assets {
     pub human_walking_animation: Animation,
     pub human_attack_animation: Animation,
     pub enemy_idle_animation: Animation,
+    pub enemy_walking_animation: Animation,
     pub enemy_hurt_animation: Animation,
     pub enemy_dying_animation: Animation,
     pub mouse_normal_texture: Texture2D,
@@ -37,6 +38,12 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .load_texture(
             thread,
             "assets/undeadChar/Undead Wraith 32x32/Undead Wraith/Wraith-Idle.png",
+        )
+        .unwrap();
+    let enemy_walking_texture = rl
+        .load_texture(
+            thread,
+            "assets/undeadChar/Undead Wraith 32x32/Undead Wraith/Wraith-Walk.png",
         )
         .unwrap();
     let enemy_hurt_texture = rl
@@ -106,6 +113,19 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         },
         enemy_idle_animation: Animation {
             texture: enemy_idle_texture,
+            frame_width: 160,
+            frame_height: 160,
+            frames_per_row: 8,
+            first: 0,
+            last: 7,
+            current: 0,
+            speed: 8.0,
+            duration_left: 0.1,
+            finished: false,
+            looping: true,
+        },
+        enemy_walking_animation: Animation {
+            texture: enemy_walking_texture,
             frame_width: 160,
             frame_height: 160,
             frames_per_row: 8,

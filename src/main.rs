@@ -86,6 +86,9 @@ fn main() {
 
     let mut attack_animation_started = false;
     let mut game_mode = game_mode::GameMode::GridScreen;
+    let mut character_combat_x: f32 = 0.0;
+    let mut enemy_combat_x: f32 = 0.0;
+    let mut combat_entering_timer: f32 = 0.0;
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -100,6 +103,8 @@ fn main() {
             &mut assets.human_attack_animation,
             &mut attack_animation_started,
             &mut game_mode,
+            &mut character_combat_x,
+            &mut enemy_combat_x,
         );
 
         combat::resolve_attack(
@@ -121,6 +126,30 @@ fn main() {
             delta_time,
             &mut assets.enemy_dying_animation,
             &mut game_mode,
+        );
+
+        let sprite_size = 500.0;
+        let overlap = 235.0;
+        let center_x = SCREEN_WIDTH as f32 / 2.0;
+        let left_x = center_x - sprite_size + overlap;
+        let right_x = center_x - overlap;
+
+        let (character_target_x, enemy_target_x) = if character.facing_left {
+            (right_x, left_x)
+        } else {
+            (left_x, right_x)
+        };
+
+        combat::enter_combat(
+            &mut character,
+            &mut enemy,
+            &mut character_combat_x,
+            &mut enemy_combat_x,
+            character_target_x,
+            enemy_target_x,
+            &mut combat_entering_timer,
+            delta_time,
+            &mut assets.human_attack_animation,
         );
 
         let (move_range, came_from) = if cursor.is_selected {
@@ -224,6 +253,7 @@ fn main() {
             character::CharacterState::Walking => &mut assets.human_walking_animation,
             character::CharacterState::Combat => &mut assets.human_attack_animation,
             character::CharacterState::ChoosingPosition => &mut assets.human_idle_animation,
+            character::CharacterState::CombatEntering => &mut assets.human_walking_animation,
         };
 
         let current_enemy_animation = match enemy.state {
@@ -231,6 +261,7 @@ fn main() {
             enemy::EnemyState::Hurt => &mut assets.enemy_hurt_animation,
             enemy::EnemyState::Dying => &mut assets.enemy_dying_animation,
             enemy::EnemyState::Dead => &mut assets.enemy_idle_animation,
+            enemy::EnemyState::CombatEntering => &mut assets.enemy_walking_animation,
         };
 
         current_animation.animation_update(delta_time);
@@ -349,19 +380,7 @@ fn main() {
             d.clear_background(Color::new(30, 30, 30, 255));
 
             let sprite_size = 500.0;
-            let overlap = 180.0; // à ajuster : plus grand = plus collés/superposés
-
-            let center_x = SCREEN_WIDTH as f32 / 2.0;
             let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
-
-            let left_x = center_x - sprite_size + overlap;
-            let right_x = center_x - overlap;
-
-            let (character_combat_x, enemy_combat_x) = if character.facing_left {
-                (right_x, left_x)
-            } else {
-                (left_x, right_x)
-            };
 
             d.draw_texture_pro(
                 &current_animation.texture,

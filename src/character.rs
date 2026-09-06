@@ -6,6 +6,7 @@ pub enum CharacterState {
     Walking,
     Combat,
     ChoosingPosition,
+    CombatEntering,
 }
 
 pub struct Character {
