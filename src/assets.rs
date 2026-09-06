@@ -5,6 +5,7 @@ pub struct Assets {
     pub human_idle_animation: Animation,
     pub human_walking_animation: Animation,
     pub human_attack_animation: Animation,
+    pub human_attack_effect_animation: Animation,
     pub enemy_idle_animation: Animation,
     pub enemy_walking_animation: Animation,
     pub enemy_hurt_animation: Animation,
@@ -32,6 +33,12 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .load_texture(
             thread,
             "assets/humanChar/Human soldier/Human soldier/human_soldier-Attact 1.png",
+        )
+        .unwrap();
+    let human_attack_effect_texture = rl
+        .load_texture(
+            thread,
+            "assets/humanChar/Human soldier/Human soldier effects/human_soldier-Attact 1 effect.png",
         )
         .unwrap();
     let enemy_idle_texture = rl
@@ -100,6 +107,19 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         },
         human_attack_animation: Animation {
             texture: human_attack_texture,
+            frame_width: 130,
+            frame_height: 100,
+            frames_per_row: 7,
+            first: 0,
+            last: 6,
+            current: 0,
+            speed: 8.0,
+            duration_left: 0.1,
+            finished: false,
+            looping: false,
+        },
+        human_attack_effect_animation: Animation {
+            texture: human_attack_effect_texture,
             frame_width: 130,
             frame_height: 100,
             frames_per_row: 7,

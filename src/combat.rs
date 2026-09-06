@@ -19,6 +19,7 @@ pub fn start_attack_if_needed(
     character: &mut Character,
     enemy: &mut Enemy,
     human_attack_animation: &mut Animation,
+    human_attack_effect_animation: &mut Animation,
     attack_animation_started: &mut bool,
     game_mode: &mut GameMode,
     character_combat_x: &mut f32,
@@ -31,6 +32,8 @@ pub fn start_attack_if_needed(
         *game_mode = GameMode::CombatScreen;
         human_attack_animation.current = 0;
         human_attack_animation.finished = false;
+        human_attack_effect_animation.current = 0;
+        human_attack_effect_animation.finished = false;
         *attack_animation_started = true;
 
         if character.grid_x < enemy.grid_x {

@@ -21,7 +21,7 @@ impl Animation {
         if self.duration_left <= 0.0 {
             self.current += 1;
 
-            if self.looping == true {
+            if self.looping {
                 if self.current > self.last {
                     self.current = self.first;
                 }

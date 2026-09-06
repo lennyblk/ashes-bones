@@ -101,6 +101,7 @@ fn main() {
             &mut character,
             &mut enemy,
             &mut assets.human_attack_animation,
+            &mut assets.human_attack_effect_animation,
             &mut attack_animation_started,
             &mut game_mode,
             &mut character_combat_x,
@@ -129,7 +130,7 @@ fn main() {
         );
 
         let sprite_size = 500.0;
-        let overlap = 235.0;
+        let overlap = 185.0;
         let center_x = SCREEN_WIDTH as f32 / 2.0;
         let left_x = center_x - sprite_size + overlap;
         let right_x = center_x - overlap;
@@ -265,6 +266,12 @@ fn main() {
         };
 
         current_animation.animation_update(delta_time);
+        if character.state == character::CharacterState::Combat {
+            assets
+                .human_attack_effect_animation
+                .animation_update(delta_time);
+        }
+
         current_enemy_animation.animation_update(delta_time);
 
         let mut source_rec_character = current_animation.animation_frame();
@@ -283,7 +290,7 @@ fn main() {
 
         // Grid screen mode ------------------------------------------------------
         if game_mode == game_mode::GameMode::GridScreen {
-            d.clear_background(Color::RAYWHITE);
+            d.clear_background(Color::BEIGE);
 
             for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
                 d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
@@ -395,7 +402,26 @@ fn main() {
                 0.0,
                 Color::WHITE,
             );
+            if character.state == character::CharacterState::Combat {
+                let mut source_rec_effect = assets.human_attack_effect_animation.animation_frame();
+                if character.facing_left {
+                    source_rec_effect.width = -source_rec_effect.width;
+                }
 
+                d.draw_texture_pro(
+                    &assets.human_attack_effect_animation.texture,
+                    source_rec_effect,
+                    Rectangle {
+                        x: character_combat_x,
+                        y: combat_y,
+                        width: sprite_size,
+                        height: sprite_size,
+                    },
+                    Vector2::new(0.0, 0.0),
+                    0.0,
+                    Color::WHITE,
+                );
+            }
             if enemy.state != enemy::EnemyState::Dead {
                 d.draw_texture_pro(
                     &current_enemy_animation.texture,
