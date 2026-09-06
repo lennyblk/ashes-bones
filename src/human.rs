@@ -1,7 +1,7 @@
 use crate::TILE_SIZE;
 
 #[derive(PartialEq)]
-pub enum CharacterState {
+pub enum HumanState {
     Idle,
     Walking,
     Combat,
@@ -9,7 +9,7 @@ pub enum CharacterState {
     CombatEntering,
 }
 
-pub struct Character {
+pub struct Human {
     pub grid_x: i32,
     pub grid_y: i32,
     pub screen_x: f32,
@@ -17,7 +17,7 @@ pub struct Character {
     pub move_points: i32,
     pub hp_points: i32,
     pub path: Vec<(i32, i32)>,
-    pub state: CharacterState,
+    pub state: HumanState,
     pub facing_left: bool,
     pub attack_range: i32,
     pub attack_power: i32,
@@ -26,7 +26,7 @@ pub struct Character {
     pub hp_max_points: i32,
 }
 
-impl Character {
+impl Human {
     pub fn update_position(&mut self, delta_time: f32) {
         let target_x = self.grid_x * TILE_SIZE - 40;
         let target_y = self.grid_y * TILE_SIZE - 40;
@@ -61,9 +61,9 @@ impl Character {
             self.path.remove(0);
             if self.path.is_empty() {
                 if self.attack_target {
-                    self.state = CharacterState::Combat;
+                    self.state = HumanState::Combat;
                 } else {
-                    self.state = CharacterState::Idle;
+                    self.state = HumanState::Idle;
                 }
             }
             return;

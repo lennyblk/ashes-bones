@@ -1,5 +1,5 @@
-use crate::enemy::Enemy;
-use crate::enemy::EnemyState::Dead;
+use crate::undead::Undead;
+use crate::undead::UndeadState::Dead;
 use std::collections::HashMap;
 
 pub struct MovementRange {
@@ -13,9 +13,9 @@ impl MovementRange {
         move_points: i32,
         grid_cols: i32,
         grid_rows: i32,
-        enemy_x: i32,
-        enemy_y: i32,
-        enemy: &Enemy,
+        wraith_x: i32,
+        wraith_y: i32,
+        wraith: &Undead,
     ) -> (Vec<(i32, i32)>, HashMap<(i32, i32), (i32, i32)>) {
         let mut visited: Vec<(i32, i32)> = vec![(start_x, start_y)];
         let mut queue: Vec<(i32, i32, i32)> = vec![(start_x, start_y, 0)]; // x, y, coût actuel
@@ -35,11 +35,11 @@ impl MovementRange {
             for (nx, ny) in neighbors {
                 let in_bounds = nx >= 0 && nx < grid_cols && ny >= 0 && ny < grid_rows;
                 let already_visited = visited.contains(&(nx, ny));
-                let is_enemy = nx == enemy_x && ny == enemy_y;
+                let is_wraith = nx == wraith_x && ny == wraith_y;
 
-                let is_blocked_by_enemy = is_enemy && enemy.state != Dead;
+                let is_blocked_by_wraith = is_wraith && wraith.state != Dead;
 
-                if in_bounds && !already_visited && !is_blocked_by_enemy {
+                if in_bounds && !already_visited && !is_blocked_by_wraith {
                     visited.push((nx, ny));
                     queue.push((nx, ny, cost + 1));
                     came_from.insert((nx, ny), (x, y));
@@ -51,19 +51,19 @@ impl MovementRange {
 
     pub fn compute_attackable_positions(
         move_range: &Vec<(i32, i32)>,
-        enemy_x: i32,
-        enemy_y: i32,
+        wraith_x: i32,
+        wraith_y: i32,
         attack_range: i32,
-        enemy: &Enemy,
+        wraith: &Undead,
     ) -> Vec<(i32, i32)> {
         let mut valid_attack_positions: Vec<(i32, i32)> = Vec::new();
 
-        if enemy.state == Dead {
+        if wraith.state == Dead {
             return valid_attack_positions;
         }
 
         for (x, y) in move_range {
-            let distance = (enemy_x - x).abs() + (enemy_y - y).abs();
+            let distance = (wraith_x - x).abs() + (wraith_y - y).abs();
             if distance <= attack_range {
                 valid_attack_positions.push((*x, *y));
             }

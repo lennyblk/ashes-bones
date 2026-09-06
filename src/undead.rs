@@ -1,5 +1,5 @@
 #[derive(Clone, Copy, PartialEq)]
-pub enum EnemyState {
+pub enum UndeadState {
     Idle,
     Dying,
     Dead,
@@ -7,12 +7,12 @@ pub enum EnemyState {
     CombatEntering,
 }
 
-pub struct Enemy {
+pub struct Undead {
     pub grid_x: i32,
     pub grid_y: i32,
     pub hp_points: i32,
     pub defense: i32,
-    pub state: EnemyState,
+    pub state: UndeadState,
     pub facing_left: bool,
     pub max_hp_points: i32,
 }

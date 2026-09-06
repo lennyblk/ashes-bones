@@ -2,14 +2,14 @@ use crate::animation::Animation;
 use raylib::prelude::*;
 
 pub struct Assets {
-    pub human_idle_animation: Animation,
-    pub human_walking_animation: Animation,
-    pub human_attack_animation: Animation,
-    pub human_attack_effect_animation: Animation,
-    pub enemy_idle_animation: Animation,
-    pub enemy_walking_animation: Animation,
-    pub enemy_hurt_animation: Animation,
-    pub enemy_dying_animation: Animation,
+    pub soldier_idle_animation: Animation,
+    pub soldier_walking_animation: Animation,
+    pub soldier_attack_animation: Animation,
+    pub soldier_attack_effect_animation: Animation,
+    pub wraith_idle_animation: Animation,
+    pub wraith_walking_animation: Animation,
+    pub wraith_hurt_animation: Animation,
+    pub wraith_dying_animation: Animation,
     pub mouse_normal_texture: Texture2D,
     pub mouse_hover_texture: Texture2D,
     pub mouse_click_texture: Texture2D,
@@ -17,49 +17,49 @@ pub struct Assets {
 }
 
 pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
-    let human_idle_texture = rl
+    let soldier_idle_texture = rl
         .load_texture(
             thread,
             "assets/humanChar/Human soldier/Human soldier/human_soldier-Idle.png",
         )
         .unwrap();
-    let human_walking_texture = rl
+    let soldier_walking_texture = rl
         .load_texture(
             thread,
             "assets/humanChar/Human soldier/Human soldier/human_soldier-Walk.png",
         )
         .unwrap();
-    let human_attack_texture = rl
+    let soldier_attack_texture = rl
         .load_texture(
             thread,
             "assets/humanChar/Human soldier/Human soldier/human_soldier-Attact 1.png",
         )
         .unwrap();
-    let human_attack_effect_texture = rl
+    let soldier_attack_effect_texture = rl
         .load_texture(
             thread,
             "assets/humanChar/Human soldier/Human soldier effects/human_soldier-Attact 1 effect.png",
         )
         .unwrap();
-    let enemy_idle_texture = rl
+    let wraith_idle_texture = rl
         .load_texture(
             thread,
             "assets/undeadChar/Undead Wraith 32x32/Undead Wraith/Wraith-Idle.png",
         )
         .unwrap();
-    let enemy_walking_texture = rl
+    let wraith_walking_texture = rl
         .load_texture(
             thread,
             "assets/undeadChar/Undead Wraith 32x32/Undead Wraith/Wraith-Walk.png",
         )
         .unwrap();
-    let enemy_hurt_texture = rl
+    let wraith_hurt_texture = rl
         .load_texture(
             thread,
             "assets/undeadChar/Undead Wraith 32x32/Undead Wraith_split shadows/Wraith-Hurt.png",
         )
         .unwrap();
-    let enemy_dying_texture = rl
+    let wraith_dying_texture = rl
         .load_texture(
             thread,
             "assets/undeadChar/Undead Wraith 32x32/Undead Wraith_split shadows/Wraith-Die.png",
@@ -79,8 +79,8 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .unwrap();
 
     Assets {
-        human_idle_animation: Animation {
-            texture: human_idle_texture,
+        soldier_idle_animation: Animation {
+            texture: soldier_idle_texture,
             frame_width: 130,
             frame_height: 100,
             frames_per_row: 7,
@@ -92,8 +92,8 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             finished: false,
             looping: true,
         },
-        human_walking_animation: Animation {
-            texture: human_walking_texture,
+        soldier_walking_animation: Animation {
+            texture: soldier_walking_texture,
             frame_width: 130,
             frame_height: 100,
             frames_per_row: 8,
@@ -105,21 +105,8 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             finished: false,
             looping: true,
         },
-        human_attack_animation: Animation {
-            texture: human_attack_texture,
-            frame_width: 130,
-            frame_height: 100,
-            frames_per_row: 7,
-            first: 0,
-            last: 6,
-            current: 0,
-            speed: 8.0,
-            duration_left: 0.1,
-            finished: false,
-            looping: false,
-        },
-        human_attack_effect_animation: Animation {
-            texture: human_attack_effect_texture,
+        soldier_attack_animation: Animation {
+            texture: soldier_attack_texture,
             frame_width: 130,
             frame_height: 100,
             frames_per_row: 7,
@@ -131,8 +118,21 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             finished: false,
             looping: false,
         },
-        enemy_idle_animation: Animation {
-            texture: enemy_idle_texture,
+        soldier_attack_effect_animation: Animation {
+            texture: soldier_attack_effect_texture,
+            frame_width: 130,
+            frame_height: 100,
+            frames_per_row: 7,
+            first: 0,
+            last: 6,
+            current: 0,
+            speed: 8.0,
+            duration_left: 0.1,
+            finished: false,
+            looping: false,
+        },
+        wraith_idle_animation: Animation {
+            texture: wraith_idle_texture,
             frame_width: 160,
             frame_height: 160,
             frames_per_row: 8,
@@ -144,8 +144,8 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             finished: false,
             looping: true,
         },
-        enemy_walking_animation: Animation {
-            texture: enemy_walking_texture,
+        wraith_walking_animation: Animation {
+            texture: wraith_walking_texture,
             frame_width: 160,
             frame_height: 160,
             frames_per_row: 8,
@@ -157,8 +157,8 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             finished: false,
             looping: true,
         },
-        enemy_hurt_animation: Animation {
-            texture: enemy_hurt_texture,
+        wraith_hurt_animation: Animation {
+            texture: wraith_hurt_texture,
             frame_width: 160,
             frame_height: 160,
             frames_per_row: 6,
@@ -170,8 +170,8 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             finished: false,
             looping: false,
         },
-        enemy_dying_animation: Animation {
-            texture: enemy_dying_texture,
+        wraith_dying_animation: Animation {
+            texture: wraith_dying_texture,
             frame_width: 160,
             frame_height: 160,
             frames_per_row: 8,
