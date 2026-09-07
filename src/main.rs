@@ -58,6 +58,7 @@ fn main() {
     };
 
     let mut soldier = Human {
+        name: String::from("Soldier"),
         grid_x: 5,
         grid_y: 5,
         screen_x: grid_to_screen_x(5),
@@ -75,6 +76,7 @@ fn main() {
     };
 
     let mut wraith = Undead {
+        name: String::from("Wraith"),
         grid_x: 6,
         grid_y: 5,
         hp_points: 100,
@@ -89,6 +91,7 @@ fn main() {
     let mut soldier_combat_x: f32 = 0.0;
     let mut wraith_combat_x: f32 = 0.0;
     let mut combat_entering_timer: f32 = 0.0;
+    let mut combat_exit_pause_timer: f32 = 0.0;
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -120,13 +123,14 @@ fn main() {
             delta_time,
             &mut assets.wraith_hurt_animation,
             &mut assets.wraith_dying_animation,
-            &mut game_mode,
         );
-        combat::update_dying_state(
+        combat::update_dying_state(&mut wraith, delta_time, &mut assets.wraith_dying_animation);
+
+        combat::combat_exit_pause_timer(
             &mut wraith,
-            delta_time,
-            &mut assets.wraith_dying_animation,
             &mut game_mode,
+            &mut combat_exit_pause_timer,
+            delta_time,
         );
 
         let sprite_size = 500.0;
@@ -401,6 +405,53 @@ fn main() {
                 Color::WHITE,
             );
 
+            // HUD combat -------------------------------------------------------
+            let bar_width = 300.0;
+            let bar_height = 30.0;
+            let padding = 50.0;
+            let bar_y = padding;
+
+            ui::draw_health_bar(
+                &mut d,
+                padding,
+                bar_y,
+                bar_width,
+                bar_height,
+                soldier.hp_points,
+                soldier.hp_max_points,
+            );
+
+            ui::draw_health_bar(
+                &mut d,
+                SCREEN_WIDTH as f32 - padding - bar_width,
+                bar_y,
+                bar_width,
+                bar_height,
+                wraith.hp_points,
+                wraith.max_hp_points,
+            );
+
+            d.draw_text_ex(
+                &assets.hud_font,
+                &soldier.name,
+                Vector2::new(padding, bar_y + bar_height + 10.0),
+                24.0,
+                1.0,
+                Color::BLACK,
+            );
+
+            d.draw_text_ex(
+                &assets.hud_font,
+                &wraith.name,
+                Vector2::new(
+                    SCREEN_WIDTH as f32 - padding - bar_width,
+                    bar_y + bar_height + 10.0,
+                ),
+                24.0,
+                1.0,
+                Color::BLACK,
+            );
+            // -------------------------------------------------------------------------------
             let sprite_size = 500.0;
             let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
 

@@ -26,13 +26,7 @@ pub fn draw_health_bar(
 
     // remplissage (HP actuels)
     let fill_width = (width * ratio) as i32;
-    d.draw_rectangle(
-        x as i32,
-        y as i32,
-        fill_width,
-        height as i32,
-        Color::new(200, 30, 30, 255),
-    );
+    d.draw_rectangle(x as i32, y as i32, fill_width, height as i32, Color::LIME);
 
     // contour
     d.draw_rectangle_lines(

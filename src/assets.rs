@@ -15,6 +15,7 @@ pub struct Assets {
     pub mouse_click_texture: Texture2D,
     pub mouse_select_texture: Texture2D,
     pub combat_screen_background_texture: Texture2D,
+    pub hud_font: Font,
 }
 
 pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
@@ -81,6 +82,9 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
     let combat_screen_background_texture = rl
         .load_texture(thread, "assets/backgrounds/plains2.png")
         .unwrap();
+    let hud_font = rl
+        .load_font(thread, "assets/fonts/BerkshireSwash-Regular.ttf")
+        .unwrap();
 
     Assets {
         soldier_idle_animation: Animation {
@@ -91,7 +95,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             first: 0,
             last: 6,
             current: 0,
-            speed: 8.0,
+            speed: 4.0,
             duration_left: 0.1,
             finished: false,
             looping: true,
@@ -192,5 +196,6 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         mouse_click_texture,
         mouse_select_texture,
         combat_screen_background_texture,
+        hud_font,
     }
 }

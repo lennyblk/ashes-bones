@@ -102,7 +102,6 @@ pub fn resolve_attack(
         human.state = HumanState::Idle;
         human.attack_target = false;
         *attack_animation_started = false;
-        println!("Undead HP: {}", enemy.hp_points);
     }
 }
 
@@ -111,7 +110,6 @@ pub fn update_hurt_state(
     delta_time: f32,
     enemy_hurt_animation: &mut Animation,
     enemy_dying_animation: &mut Animation,
-    game_mode: &mut GameMode,
 ) {
     if enemy.state == UndeadState::Hurt {
         enemy_hurt_animation.animation_update(delta_time);
@@ -122,7 +120,6 @@ pub fn update_hurt_state(
                 enemy.state = UndeadState::Dying;
             } else {
                 enemy.state = UndeadState::Idle;
-                *game_mode = GameMode::GridScreen;
             }
         }
     }
@@ -132,13 +129,28 @@ pub fn update_dying_state(
     enemy: &mut Undead,
     delta_time: f32,
     enemy_dying_animation: &mut Animation,
-    game_mode: &mut GameMode,
 ) {
     if enemy.state == UndeadState::Dying {
         enemy_dying_animation.animation_update(delta_time);
         if enemy_dying_animation.finished {
             enemy.state = UndeadState::Dead;
+        }
+    }
+}
+
+pub fn combat_exit_pause_timer(
+    wraith: &mut Undead,
+    game_mode: &mut GameMode,
+    combat_exit_pause_timer: &mut f32,
+    delta_time: f32,
+) {
+    let combat_finished = wraith.state == UndeadState::Idle || wraith.state == UndeadState::Dead;
+
+    if *game_mode == GameMode::CombatScreen && combat_finished {
+        *combat_exit_pause_timer += delta_time;
+        if *combat_exit_pause_timer >= 0.5 {
             *game_mode = GameMode::GridScreen;
+            *combat_exit_pause_timer = 0.0;
         }
     }
 }
