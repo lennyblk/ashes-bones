@@ -8,6 +8,7 @@ mod cursor;
 mod game_mode;
 mod human;
 mod input;
+mod map;
 mod movement;
 mod ui;
 mod undead;
@@ -92,6 +93,8 @@ fn main() {
     let mut wraith_combat_x: f32 = 0.0;
     let mut combat_entering_timer: f32 = 0.0;
     let mut combat_exit_pause_timer: f32 = 0.0;
+    let tile_map = map::TileMap::load(&mut rl, &thread, "assets/maps/ashes-bones-map.tmx");
+    let blocked_tiles = tile_map.blocked_tiles.clone();
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -167,6 +170,7 @@ fn main() {
                 wraith.grid_x,
                 wraith.grid_y,
                 &wraith,
+                &blocked_tiles,
             )
         } else {
             (Vec::new(), HashMap::new())
@@ -293,6 +297,7 @@ fn main() {
         // Grid screen mode ------------------------------------------------------
         if game_mode == game_mode::GameMode::GridScreen {
             d.clear_background(Color::BEIGE);
+            tile_map.draw(&mut d);
 
             for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
                 d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);

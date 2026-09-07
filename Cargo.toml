@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 raylib = "6.0.0"
+tiled = "0.16.0"
 
 [lints.clippy]
 style = "allow"
