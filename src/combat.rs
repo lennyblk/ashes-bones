@@ -16,112 +16,112 @@ pub fn attack_damage_dealt(attack_power: i32, defense: i32) -> i32 {
 }
 
 pub fn start_attack_if_needed(
-    soldier: &mut Human,
-    wraith: &mut Undead,
-    soldier_attack_animation: &mut Animation,
-    soldier_attack_effect_animation: &mut Animation,
+    human: &mut Human,
+    enemy: &mut Undead,
+    human_attack_animation: &mut Animation,
+    human_attack_effect_animation: &mut Animation,
     attack_animation_started: &mut bool,
     game_mode: &mut GameMode,
-    soldier_combat_x: &mut f32,
-    wraith_combat_x: &mut f32,
+    human_combat_x: &mut f32,
+    enemy_combat_x: &mut f32,
 ) {
-    if soldier.state == HumanState::Combat && !*attack_animation_started {
-        soldier.state = HumanState::CombatEntering;
-        wraith.state = UndeadState::CombatEntering;
+    if human.state == HumanState::Combat && !*attack_animation_started {
+        human.state = HumanState::CombatEntering;
+        enemy.state = UndeadState::CombatEntering;
 
         *game_mode = GameMode::CombatScreen;
 
         // reset motion
-        soldier_attack_animation.current = 0;
-        soldier_attack_animation.finished = false;
+        human_attack_animation.current = 0;
+        human_attack_animation.finished = false;
 
         // reset effect
-        soldier_attack_effect_animation.current = 0;
-        soldier_attack_effect_animation.finished = false;
+        human_attack_effect_animation.current = 0;
+        human_attack_effect_animation.finished = false;
 
         *attack_animation_started = true;
 
-        if soldier.grid_x < wraith.grid_x {
-            soldier.facing_left = false;
-            *soldier_combat_x = -200.0;
-            wraith.facing_left = true;
-            *wraith_combat_x = SCREEN_WIDTH + 200.0;
+        if human.grid_x < enemy.grid_x {
+            human.facing_left = false;
+            *human_combat_x = -200.0;
+            enemy.facing_left = true;
+            *enemy_combat_x = SCREEN_WIDTH + 200.0;
         } else {
-            soldier.facing_left = true;
-            *soldier_combat_x = SCREEN_WIDTH + 200.0;
-            wraith.facing_left = false;
-            *wraith_combat_x = -200.0;
+            human.facing_left = true;
+            *human_combat_x = SCREEN_WIDTH + 200.0;
+            enemy.facing_left = false;
+            *enemy_combat_x = -200.0;
         }
     }
 }
 
 pub fn enter_combat(
-    soldier: &mut Human,
-    wraith: &mut Undead,
-    soldier_combat_x: &mut f32,
-    wraith_combat_x: &mut f32,
-    soldier_target_x: f32,
-    wraith_target_x: f32,
+    human: &mut Human,
+    enemy: &mut Undead,
+    human_combat_x: &mut f32,
+    enemy_combat_x: &mut f32,
+    human_target_x: f32,
+    enemy_target_x: f32,
     combat_entering_timer: &mut f32,
     delta_time: f32,
-    soldier_attack_animation: &mut Animation,
+    human_attack_animation: &mut Animation,
 ) {
-    if soldier.state == HumanState::CombatEntering {
+    if human.state == HumanState::CombatEntering {
         let speed = 2.0;
-        *soldier_combat_x += (soldier_target_x - *soldier_combat_x) * speed * delta_time;
-        *wraith_combat_x += (wraith_target_x - *wraith_combat_x) * speed * delta_time;
+        *human_combat_x += (human_target_x - *human_combat_x) * speed * delta_time;
+        *enemy_combat_x += (enemy_target_x - *enemy_combat_x) * speed * delta_time;
 
         *combat_entering_timer += delta_time;
 
         if *combat_entering_timer >= 1.5 {
-            soldier.state = HumanState::Combat;
-            wraith.state = UndeadState::CombatEntering;
-            soldier_attack_animation.current = 0;
-            soldier_attack_animation.finished = false;
+            human.state = HumanState::Combat;
+            enemy.state = UndeadState::CombatEntering;
+            human_attack_animation.current = 0;
+            human_attack_animation.finished = false;
             *combat_entering_timer = 0.0;
         }
     }
 }
 
 pub fn resolve_attack(
-    soldier: &mut Human,
-    wraith: &mut Undead,
-    soldier_attack_animation: &Animation,
-    wraith_hurt_animation: &mut Animation,
+    human: &mut Human,
+    enemy: &mut Undead,
+    human_attack_animation: &Animation,
+    enemy_hurt_animation: &mut Animation,
     attack_animation_started: &mut bool,
 ) {
-    if soldier.state == HumanState::Combat && soldier_attack_animation.finished {
-        wraith.hp_points -= attack_damage_dealt(soldier.attack_power, wraith.defense);
-        if wraith.hp_points < 0 {
-            wraith.hp_points = 0;
+    if human.state == HumanState::Combat && human_attack_animation.finished {
+        enemy.hp_points -= attack_damage_dealt(human.attack_power, enemy.defense);
+        if enemy.hp_points < 0 {
+            enemy.hp_points = 0;
         }
-        wraith_hurt_animation.current = 0;
-        wraith_hurt_animation.finished = false;
-        wraith.state = UndeadState::Hurt;
+        enemy_hurt_animation.current = 0;
+        enemy_hurt_animation.finished = false;
+        enemy.state = UndeadState::Hurt;
 
-        soldier.state = HumanState::Idle;
-        soldier.attack_target = false;
+        human.state = HumanState::Idle;
+        human.attack_target = false;
         *attack_animation_started = false;
-        println!("Undead HP: {}", wraith.hp_points);
+        println!("Undead HP: {}", enemy.hp_points);
     }
 }
 
 pub fn update_hurt_state(
-    wraith: &mut Undead,
+    enemy: &mut Undead,
     delta_time: f32,
-    wraith_hurt_animation: &mut Animation,
-    wraith_dying_animation: &mut Animation,
+    enemy_hurt_animation: &mut Animation,
+    enemy_dying_animation: &mut Animation,
     game_mode: &mut GameMode,
 ) {
-    if wraith.state == UndeadState::Hurt {
-        wraith_hurt_animation.animation_update(delta_time);
-        if wraith_hurt_animation.finished {
-            if wraith.hp_points == 0 {
-                wraith_dying_animation.current = 0;
-                wraith_dying_animation.finished = false;
-                wraith.state = UndeadState::Dying;
+    if enemy.state == UndeadState::Hurt {
+        enemy_hurt_animation.animation_update(delta_time);
+        if enemy_hurt_animation.finished {
+            if enemy.hp_points == 0 {
+                enemy_dying_animation.current = 0;
+                enemy_dying_animation.finished = false;
+                enemy.state = UndeadState::Dying;
             } else {
-                wraith.state = UndeadState::Idle;
+                enemy.state = UndeadState::Idle;
                 *game_mode = GameMode::GridScreen;
             }
         }
@@ -129,15 +129,15 @@ pub fn update_hurt_state(
 }
 
 pub fn update_dying_state(
-    wraith: &mut Undead,
+    enemy: &mut Undead,
     delta_time: f32,
-    wraith_dying_animation: &mut Animation,
+    enemy_dying_animation: &mut Animation,
     game_mode: &mut GameMode,
 ) {
-    if wraith.state == UndeadState::Dying {
-        wraith_dying_animation.animation_update(delta_time);
-        if wraith_dying_animation.finished {
-            wraith.state = UndeadState::Dead;
+    if enemy.state == UndeadState::Dying {
+        enemy_dying_animation.animation_update(delta_time);
+        if enemy_dying_animation.finished {
+            enemy.state = UndeadState::Dead;
             *game_mode = GameMode::GridScreen;
         }
     }

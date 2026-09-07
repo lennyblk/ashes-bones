@@ -3,19 +3,19 @@ use raylib::prelude::*;
 use std::collections::HashMap;
 mod animation;
 mod assets;
-mod human;
 mod combat;
 mod cursor;
-mod undead;
 mod game_mode;
+mod human;
 mod input;
 mod movement;
 mod ui;
+mod undead;
 
-use human::Human;
 use cursor::Cursors;
-use undead::Undead;
+use human::Human;
 use movement::MovementRange;
+use undead::Undead;
 
 const TILE_SIZE: i32 = 48;
 const GRID_COLS: i32 = 25;
@@ -231,9 +231,7 @@ fn main() {
             click_consumed = true;
         }
 
-        if input::cancel_pressed(&rl)
-            && soldier.state == human::HumanState::ChoosingPosition
-        {
+        if input::cancel_pressed(&rl) && soldier.state == human::HumanState::ChoosingPosition {
             soldier.state = human::HumanState::Idle;
         }
 
@@ -384,7 +382,24 @@ fn main() {
             );
         } else {
             // écran de combat --------------------------------------------------
-            d.clear_background(Color::new(30, 30, 30, 255));
+            d.draw_texture_pro(
+                &assets.combat_screen_background_texture,
+                Rectangle {
+                    x: 0.0,
+                    y: 0.0,
+                    width: assets.combat_screen_background_texture.width as f32,
+                    height: assets.combat_screen_background_texture.height as f32,
+                },
+                Rectangle {
+                    x: 0.0,
+                    y: 0.0,
+                    width: SCREEN_WIDTH as f32,
+                    height: SCREEN_HEIGHT as f32,
+                },
+                Vector2::new(0.0, 0.0),
+                0.0,
+                Color::WHITE,
+            );
 
             let sprite_size = 500.0;
             let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
@@ -403,7 +418,8 @@ fn main() {
                 Color::WHITE,
             );
             if soldier.state == human::HumanState::Combat {
-                let mut source_rec_effect = assets.soldier_attack_effect_animation.animation_frame();
+                let mut source_rec_effect =
+                    assets.soldier_attack_effect_animation.animation_frame();
                 if soldier.facing_left {
                     source_rec_effect.width = -source_rec_effect.width;
                 }

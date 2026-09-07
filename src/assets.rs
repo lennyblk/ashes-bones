@@ -14,6 +14,7 @@ pub struct Assets {
     pub mouse_hover_texture: Texture2D,
     pub mouse_click_texture: Texture2D,
     pub mouse_select_texture: Texture2D,
+    pub combat_screen_background_texture: Texture2D,
 }
 
 pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
@@ -76,6 +77,9 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .unwrap();
     let mouse_select_texture = rl
         .load_texture(thread, "assets/cursors/selector_frame_v2.png")
+        .unwrap();
+    let combat_screen_background_texture = rl
+        .load_texture(thread, "assets/backgrounds/plains2.png")
         .unwrap();
 
     Assets {
@@ -187,5 +191,6 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         mouse_hover_texture,
         mouse_click_texture,
         mouse_select_texture,
+        combat_screen_background_texture,
     }
 }
