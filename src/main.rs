@@ -299,13 +299,13 @@ fn main() {
             d.clear_background(Color::BEIGE);
             tile_map.draw(&mut d);
 
-            for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
-                d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
-            }
-
-            for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
-                d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
-            }
+            // for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
+            //     d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
+            // }
+            //
+            // for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
+            //     d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
+            // }
 
             for (x, y) in &move_range {
                 d.draw_rectangle(
