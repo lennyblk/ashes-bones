@@ -24,6 +24,7 @@ pub enum UnitState {
     Dead,
 }
 
+#[derive(Clone)]
 pub struct Unit {
     pub name: String,
     pub faction: Faction,

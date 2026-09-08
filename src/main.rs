@@ -1,6 +1,7 @@
 use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
 use std::collections::HashMap;
+mod ai;
 mod animation;
 mod assets;
 mod combat;
@@ -60,10 +61,10 @@ fn main() {
         name: String::from("Soldier"),
         faction: Faction::Human,
         class: UnitClass::Soldier,
-        grid_x: 5,
-        grid_y: 5,
-        screen_x: grid_to_screen_x(5),
-        screen_y: grid_to_screen_y(5),
+        grid_x: 6,
+        grid_y: 10,
+        screen_x: grid_to_screen_x(6),
+        screen_y: grid_to_screen_y(10),
         move_points: 2,
         hp_points: 100,
         hp_max_points: 100,
@@ -84,7 +85,7 @@ fn main() {
         grid_y: 5,
         screen_x: grid_to_screen_x(6),
         screen_y: grid_to_screen_y(5),
-        move_points: 4,
+        move_points: 2,
         hp_points: 100,
         hp_max_points: 100,
         path: Vec::new(),
@@ -96,14 +97,17 @@ fn main() {
         attack_target: false,
     };
 
-    let mut attack_animation_started = false;
     let mut game_mode = game_mode::GameMode::GridScreen;
     let mut soldier_combat_x: f32 = 0.0;
     let mut wraith_combat_x: f32 = 0.0;
     let mut combat_entering_timer: f32 = 0.0;
+    let mut combat_ready_timer: f32 = 0.0;
     let mut combat_exit_pause_timer: f32 = 0.0;
     let tile_map = map::TileMap::load(&mut rl, &thread, "assets/maps/ashes-bones-map.tmx");
     let blocked_tiles = tile_map.blocked_tiles.clone();
+
+    let mut attack_animation_started = false;
+    let mut active_attacker: Option<Faction> = None;
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -115,39 +119,23 @@ fn main() {
         wraith.update_position(delta_time);
         wraith.advance_path();
 
+        if rl.is_key_pressed(KeyboardKey::KEY_T) {
+            if let Some(target) = ai::find_closest_target(&wraith, &[soldier.clone()]) {
+                ai::ai_attack_if_in_range(&mut wraith, &target);
+                if wraith.state != UnitState::Attacking {
+                    ai::ai_move_toward_target(&mut wraith, &target, &blocked_tiles);
+                }
+            }
+        }
+
         // combat -----------------------------------------------------------
-        combat::start_attack_if_needed(
-            &mut soldier,
-            &mut wraith,
-            &mut assets.soldier.attack,
-            &mut assets.soldier.attack_effect,
-            &mut attack_animation_started,
-            &mut game_mode,
-            &mut soldier_combat_x,
-            &mut wraith_combat_x,
-        );
-
-        combat::resolve_attack(
-            &mut soldier,
-            &mut wraith,
-            &assets.soldier.attack,
-            &mut assets.wraith.hurt,
-            &mut attack_animation_started,
-        );
-        combat::update_hurt_state(
-            &mut wraith,
-            delta_time,
-            &mut assets.wraith.hurt,
-            &mut assets.wraith.die,
-        );
-        combat::update_dying_state(&mut wraith, delta_time, &mut assets.wraith.die);
-
-        combat::combat_exit_pause_timer(
-            &mut wraith,
-            &mut game_mode,
-            &mut combat_exit_pause_timer,
-            delta_time,
-        );
+        if game_mode == game_mode::GameMode::GridScreen && active_attacker.is_none() {
+            if soldier.state == UnitState::Attacking {
+                active_attacker = Some(Faction::Human);
+            } else if wraith.state == UnitState::Attacking {
+                active_attacker = Some(Faction::Undead);
+            }
+        }
 
         let sprite_size = 500.0;
         let overlap = 185.0;
@@ -161,17 +149,115 @@ fn main() {
             (left_x, right_x)
         };
 
-        combat::enter_combat(
-            &mut soldier,
-            &mut wraith,
-            &mut soldier_combat_x,
-            &mut wraith_combat_x,
-            soldier_target_x,
-            wraith_target_x,
-            &mut combat_entering_timer,
-            delta_time,
-            &mut assets.soldier.attack,
-        );
+        match active_attacker {
+            Some(Faction::Human) => {
+                combat::start_attack_if_needed(
+                    &mut soldier,
+                    &mut wraith,
+                    &mut assets.soldier.attack,
+                    &mut assets.soldier.attack_effect,
+                    &mut attack_animation_started,
+                    &mut game_mode,
+                    &mut soldier_combat_x,
+                    &mut wraith_combat_x,
+                );
+                combat::enter_combat(
+                    &mut soldier,
+                    &mut wraith,
+                    &mut soldier_combat_x,
+                    &mut wraith_combat_x,
+                    soldier_target_x,
+                    wraith_target_x,
+                    &mut combat_entering_timer,
+                    delta_time,
+                );
+                combat::start_attack_after_ready(
+                    &mut soldier,
+                    &wraith,
+                    attack_animation_started,
+                    &mut combat_ready_timer,
+                    delta_time,
+                    &mut assets.soldier.attack,
+                );
+                combat::resolve_attack(
+                    &mut soldier,
+                    &mut wraith,
+                    &assets.soldier.attack,
+                    &mut assets.wraith.hurt,
+                    &mut attack_animation_started,
+                );
+                combat::update_hurt_state(
+                    &mut wraith,
+                    delta_time,
+                    &mut assets.wraith.hurt,
+                    &mut assets.wraith.die,
+                );
+                combat::update_dying_state(&mut wraith, delta_time, &mut assets.wraith.die);
+                combat::combat_exit_pause_timer(
+                    &mut wraith,
+                    attack_animation_started,
+                    &mut game_mode,
+                    &mut combat_exit_pause_timer,
+                    delta_time,
+                );
+            }
+            Some(Faction::Undead) => {
+                combat::start_attack_if_needed(
+                    &mut wraith,
+                    &mut soldier,
+                    &mut assets.wraith.attack,
+                    &mut assets.wraith.attack_effect,
+                    &mut attack_animation_started,
+                    &mut game_mode,
+                    &mut wraith_combat_x,
+                    &mut soldier_combat_x,
+                );
+                combat::enter_combat(
+                    &mut wraith,
+                    &mut soldier,
+                    &mut wraith_combat_x,
+                    &mut soldier_combat_x,
+                    wraith_target_x,
+                    soldier_target_x,
+                    &mut combat_entering_timer,
+                    delta_time,
+                );
+                combat::start_attack_after_ready(
+                    &mut wraith,
+                    &soldier,
+                    attack_animation_started,
+                    &mut combat_ready_timer,
+                    delta_time,
+                    &mut assets.wraith.attack,
+                );
+                combat::resolve_attack(
+                    &mut wraith,
+                    &mut soldier,
+                    &assets.wraith.attack,
+                    &mut assets.soldier.hurt,
+                    &mut attack_animation_started,
+                );
+                combat::update_hurt_state(
+                    &mut soldier,
+                    delta_time,
+                    &mut assets.soldier.hurt,
+                    &mut assets.soldier.die,
+                );
+                combat::update_dying_state(&mut soldier, delta_time, &mut assets.soldier.die);
+                combat::combat_exit_pause_timer(
+                    &mut soldier,
+                    attack_animation_started,
+                    &mut game_mode,
+                    &mut combat_exit_pause_timer,
+                    delta_time,
+                );
+            }
+            None => {}
+        }
+
+        if active_attacker.is_some() && game_mode == game_mode::GameMode::GridScreen {
+            active_attacker = None;
+        }
 
         let (move_range, came_from) = if cursor.is_selected {
             MovementRange::compute_movement_range(
@@ -296,6 +382,9 @@ fn main() {
         }
 
         current_wraith_animation.animation_update(delta_time);
+        if wraith.state == UnitState::Attacking {
+            assets.wraith.attack_effect.animation_update(delta_time);
+        }
 
         let mut source_rec_soldier = current_animation.animation_frame();
         let mut source_rec_wraith = current_wraith_animation.animation_frame();
@@ -369,27 +458,29 @@ fn main() {
                 );
             }
 
-            d.draw_texture_pro(
-                &current_animation.texture,
-                source_rec_soldier,
-                Rectangle {
-                    x: soldier.screen_x,
-                    y: soldier.screen_y,
-                    width: 128.0,
-                    height: 128.0,
-                },
-                Vector2::new(0.0, 0.0),
-                0.0,
-                Color::WHITE,
-            );
+            if soldier.is_alive() {
+                d.draw_texture_pro(
+                    &current_animation.texture,
+                    source_rec_soldier,
+                    Rectangle {
+                        x: soldier.screen_x,
+                        y: soldier.screen_y,
+                        width: 128.0,
+                        height: 128.0,
+                    },
+                    Vector2::new(0.0, 0.0),
+                    0.0,
+                    Color::WHITE,
+                );
+            }
 
             if wraith.is_alive() {
                 d.draw_texture_pro(
                     &current_wraith_animation.texture,
                     source_rec_wraith,
                     Rectangle {
-                        x: grid_to_screen_x(wraith.grid_x),
-                        y: grid_to_screen_y(wraith.grid_y),
+                        x: wraith.screen_x,
+                        y: wraith.screen_y,
                         width: 128.0,
                         height: 128.0,
                     },
@@ -477,19 +568,21 @@ fn main() {
             let sprite_size = 500.0;
             let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
 
-            d.draw_texture_pro(
-                &current_animation.texture,
-                source_rec_soldier,
-                Rectangle {
-                    x: soldier_combat_x,
-                    y: combat_y,
-                    width: sprite_size,
-                    height: sprite_size,
-                },
-                Vector2::new(0.0, 0.0),
-                0.0,
-                Color::WHITE,
-            );
+            if soldier.is_alive() {
+                d.draw_texture_pro(
+                    &current_animation.texture,
+                    source_rec_soldier,
+                    Rectangle {
+                        x: soldier_combat_x,
+                        y: combat_y,
+                        width: sprite_size,
+                        height: sprite_size,
+                    },
+                    Vector2::new(0.0, 0.0),
+                    0.0,
+                    Color::WHITE,
+                );
+            }
             if soldier.state == UnitState::Attacking {
                 let effect_animation = &assets.soldier.attack_effect;
                 let mut source_rec_effect = effect_animation.animation_frame();
@@ -502,6 +595,27 @@ fn main() {
                     source_rec_effect,
                     Rectangle {
                         x: soldier_combat_x,
+                        y: combat_y,
+                        width: sprite_size,
+                        height: sprite_size,
+                    },
+                    Vector2::new(0.0, 0.0),
+                    0.0,
+                    Color::WHITE,
+                );
+            }
+            if wraith.state == UnitState::Attacking {
+                let effect_animation = &assets.wraith.attack_effect;
+                let mut source_rec_effect = effect_animation.animation_frame();
+                if wraith.facing_left {
+                    source_rec_effect.width = -source_rec_effect.width;
+                }
+
+                d.draw_texture_pro(
+                    &effect_animation.texture,
+                    source_rec_effect,
+                    Rectangle {
+                        x: wraith_combat_x,
                         y: combat_y,
                         width: sprite_size,
                         height: sprite_size,

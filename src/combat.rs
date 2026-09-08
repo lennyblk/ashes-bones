@@ -60,7 +60,6 @@ pub fn enter_combat(
     defender_target_x: f32,
     combat_entering_timer: &mut f32,
     delta_time: f32,
-    attacker_attack_animation: &mut Animation,
 ) {
     if attacker.state == UnitState::CombatEntering {
         let speed = 2.0;
@@ -70,11 +69,33 @@ pub fn enter_combat(
         *combat_entering_timer += delta_time;
 
         if *combat_entering_timer >= 1.5 {
+            attacker.state = UnitState::Idle;
+            defender.state = UnitState::Idle;
+            *combat_entering_timer = 0.0;
+        }
+    }
+}
+
+// temps avec les deux persos en Idle pour preparer les minis jeux plus tard
+pub fn start_attack_after_ready(
+    attacker: &mut Unit,
+    defender: &Unit,
+    attack_in_progress: bool,
+    ready_timer: &mut f32,
+    delta_time: f32,
+    attacker_attack_animation: &mut Animation,
+) {
+    if !attack_in_progress {
+        return;
+    }
+
+    if attacker.state == UnitState::Idle && defender.state == UnitState::Idle {
+        *ready_timer += delta_time;
+        if *ready_timer >= 0.3 {
             attacker.state = UnitState::Attacking;
-            defender.state = UnitState::CombatEntering;
             attacker_attack_animation.current = 0;
             attacker_attack_animation.finished = false;
-            *combat_entering_timer = 0.0;
+            *ready_timer = 0.0;
         }
     }
 }
@@ -136,15 +157,17 @@ pub fn update_dying_state(
 
 pub fn combat_exit_pause_timer(
     defender: &mut Unit,
+    attack_in_progress: bool,
     game_mode: &mut GameMode,
     combat_exit_pause_timer: &mut f32,
     delta_time: f32,
 ) {
-    let combat_finished = defender.state == UnitState::Idle || defender.state == UnitState::Dead;
+    let combat_finished = !attack_in_progress
+        && (defender.state == UnitState::Idle || defender.state == UnitState::Dead);
 
     if *game_mode == GameMode::CombatScreen && combat_finished {
         *combat_exit_pause_timer += delta_time;
-        if *combat_exit_pause_timer >= 0.5 {
+        if *combat_exit_pause_timer >= 0.2 {
             *game_mode = GameMode::GridScreen;
             *combat_exit_pause_timer = 0.0;
         }
