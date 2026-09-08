@@ -120,7 +120,7 @@ fn main() {
             &mut soldier,
             &mut wraith,
             &mut assets.soldier.attack,
-            assets.soldier.attack_effect.as_mut().unwrap(),
+            &mut assets.soldier.attack_effect,
             &mut attack_animation_started,
             &mut game_mode,
             &mut soldier_combat_x,
@@ -491,7 +491,7 @@ fn main() {
                 Color::WHITE,
             );
             if soldier.state == UnitState::Attacking {
-                let effect_animation = assets.soldier.attack_effect.as_ref().unwrap();
+                let effect_animation = &assets.soldier.attack_effect;
                 let mut source_rec_effect = effect_animation.animation_frame();
                 if soldier.facing_left {
                     source_rec_effect.width = -source_rec_effect.width;
