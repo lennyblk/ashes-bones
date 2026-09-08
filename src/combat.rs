@@ -1,13 +1,9 @@
 use crate::animation::Animation;
 use crate::game_mode::GameMode;
-use crate::human::{Human, HumanState};
-use crate::undead::{Undead, UndeadState};
+use crate::unit::{Unit, UnitState};
+use crate::{GRID_COLS, TILE_SIZE};
 
-const TILE_SIZE: f32 = 48.0;
-const GRID_COLS: f32 = 25.0;
-const GRID_ROWS: f32 = 16.0;
-const SCREEN_WIDTH: f32 = GRID_COLS * TILE_SIZE;
-const SCREEN_HEIGHT: f32 = GRID_ROWS * TILE_SIZE;
+const SCREEN_WIDTH: f32 = (GRID_COLS * TILE_SIZE) as f32;
 
 pub fn attack_damage_dealt(attack_power: i32, defense: i32) -> i32 {
     let reduction = defense as f32 / 100.0;
@@ -16,135 +12,135 @@ pub fn attack_damage_dealt(attack_power: i32, defense: i32) -> i32 {
 }
 
 pub fn start_attack_if_needed(
-    human: &mut Human,
-    enemy: &mut Undead,
-    human_attack_animation: &mut Animation,
-    human_attack_effect_animation: &mut Animation,
+    attacker: &mut Unit,
+    defender: &mut Unit,
+    attacker_attack_animation: &mut Animation,
+    attacker_attack_effect_animation: &mut Animation,
     attack_animation_started: &mut bool,
     game_mode: &mut GameMode,
-    human_combat_x: &mut f32,
-    enemy_combat_x: &mut f32,
+    attacker_combat_x: &mut f32,
+    defender_combat_x: &mut f32,
 ) {
-    if human.state == HumanState::Combat && !*attack_animation_started {
-        human.state = HumanState::CombatEntering;
-        enemy.state = UndeadState::CombatEntering;
+    if attacker.state == UnitState::Attacking && !*attack_animation_started {
+        attacker.state = UnitState::CombatEntering;
+        defender.state = UnitState::CombatEntering;
 
         *game_mode = GameMode::CombatScreen;
 
         // reset motion
-        human_attack_animation.current = 0;
-        human_attack_animation.finished = false;
+        attacker_attack_animation.current = 0;
+        attacker_attack_animation.finished = false;
 
         // reset effect
-        human_attack_effect_animation.current = 0;
-        human_attack_effect_animation.finished = false;
+        attacker_attack_effect_animation.current = 0;
+        attacker_attack_effect_animation.finished = false;
 
         *attack_animation_started = true;
 
-        if human.grid_x < enemy.grid_x {
-            human.facing_left = false;
-            *human_combat_x = -200.0;
-            enemy.facing_left = true;
-            *enemy_combat_x = SCREEN_WIDTH + 200.0;
+        if attacker.grid_x < defender.grid_x {
+            attacker.facing_left = false;
+            *attacker_combat_x = -200.0;
+            defender.facing_left = true;
+            *defender_combat_x = SCREEN_WIDTH + 200.0;
         } else {
-            human.facing_left = true;
-            *human_combat_x = SCREEN_WIDTH + 200.0;
-            enemy.facing_left = false;
-            *enemy_combat_x = -200.0;
+            attacker.facing_left = true;
+            *attacker_combat_x = SCREEN_WIDTH + 200.0;
+            defender.facing_left = false;
+            *defender_combat_x = -200.0;
         }
     }
 }
 
 pub fn enter_combat(
-    human: &mut Human,
-    enemy: &mut Undead,
-    human_combat_x: &mut f32,
-    enemy_combat_x: &mut f32,
-    human_target_x: f32,
-    enemy_target_x: f32,
+    attacker: &mut Unit,
+    defender: &mut Unit,
+    attacker_combat_x: &mut f32,
+    defender_combat_x: &mut f32,
+    attacker_target_x: f32,
+    defender_target_x: f32,
     combat_entering_timer: &mut f32,
     delta_time: f32,
-    human_attack_animation: &mut Animation,
+    attacker_attack_animation: &mut Animation,
 ) {
-    if human.state == HumanState::CombatEntering {
+    if attacker.state == UnitState::CombatEntering {
         let speed = 2.0;
-        *human_combat_x += (human_target_x - *human_combat_x) * speed * delta_time;
-        *enemy_combat_x += (enemy_target_x - *enemy_combat_x) * speed * delta_time;
+        *attacker_combat_x += (attacker_target_x - *attacker_combat_x) * speed * delta_time;
+        *defender_combat_x += (defender_target_x - *defender_combat_x) * speed * delta_time;
 
         *combat_entering_timer += delta_time;
 
         if *combat_entering_timer >= 1.5 {
-            human.state = HumanState::Combat;
-            enemy.state = UndeadState::CombatEntering;
-            human_attack_animation.current = 0;
-            human_attack_animation.finished = false;
+            attacker.state = UnitState::Attacking;
+            defender.state = UnitState::CombatEntering;
+            attacker_attack_animation.current = 0;
+            attacker_attack_animation.finished = false;
             *combat_entering_timer = 0.0;
         }
     }
 }
 
 pub fn resolve_attack(
-    human: &mut Human,
-    enemy: &mut Undead,
-    human_attack_animation: &Animation,
-    enemy_hurt_animation: &mut Animation,
+    attacker: &mut Unit,
+    defender: &mut Unit,
+    attacker_attack_animation: &Animation,
+    defender_hurt_animation: &mut Animation,
     attack_animation_started: &mut bool,
 ) {
-    if human.state == HumanState::Combat && human_attack_animation.finished {
-        enemy.hp_points -= attack_damage_dealt(human.attack_power, enemy.defense);
-        if enemy.hp_points < 0 {
-            enemy.hp_points = 0;
+    if attacker.state == UnitState::Attacking && attacker_attack_animation.finished {
+        defender.hp_points -= attack_damage_dealt(attacker.attack_power, defender.defense);
+        if defender.hp_points < 0 {
+            defender.hp_points = 0;
         }
-        enemy_hurt_animation.current = 0;
-        enemy_hurt_animation.finished = false;
-        enemy.state = UndeadState::Hurt;
+        defender_hurt_animation.current = 0;
+        defender_hurt_animation.finished = false;
+        defender.state = UnitState::Hurt;
 
-        human.state = HumanState::Idle;
-        human.attack_target = false;
+        attacker.state = UnitState::Idle;
+        attacker.attack_target = false;
         *attack_animation_started = false;
     }
 }
 
 pub fn update_hurt_state(
-    enemy: &mut Undead,
+    defender: &mut Unit,
     delta_time: f32,
-    enemy_hurt_animation: &mut Animation,
-    enemy_dying_animation: &mut Animation,
+    defender_hurt_animation: &mut Animation,
+    defender_dying_animation: &mut Animation,
 ) {
-    if enemy.state == UndeadState::Hurt {
-        enemy_hurt_animation.animation_update(delta_time);
-        if enemy_hurt_animation.finished {
-            if enemy.hp_points == 0 {
-                enemy_dying_animation.current = 0;
-                enemy_dying_animation.finished = false;
-                enemy.state = UndeadState::Dying;
+    if defender.state == UnitState::Hurt {
+        defender_hurt_animation.animation_update(delta_time);
+        if defender_hurt_animation.finished {
+            if defender.hp_points == 0 {
+                defender_dying_animation.current = 0;
+                defender_dying_animation.finished = false;
+                defender.state = UnitState::Dying;
             } else {
-                enemy.state = UndeadState::Idle;
+                defender.state = UnitState::Idle;
             }
         }
     }
 }
 
 pub fn update_dying_state(
-    enemy: &mut Undead,
+    defender: &mut Unit,
     delta_time: f32,
-    enemy_dying_animation: &mut Animation,
+    defender_dying_animation: &mut Animation,
 ) {
-    if enemy.state == UndeadState::Dying {
-        enemy_dying_animation.animation_update(delta_time);
-        if enemy_dying_animation.finished {
-            enemy.state = UndeadState::Dead;
+    if defender.state == UnitState::Dying {
+        defender_dying_animation.animation_update(delta_time);
+        if defender_dying_animation.finished {
+            defender.state = UnitState::Dead;
         }
     }
 }
 
 pub fn combat_exit_pause_timer(
-    wraith: &mut Undead,
+    defender: &mut Unit,
     game_mode: &mut GameMode,
     combat_exit_pause_timer: &mut f32,
     delta_time: f32,
 ) {
-    let combat_finished = wraith.state == UndeadState::Idle || wraith.state == UndeadState::Dead;
+    let combat_finished = defender.state == UnitState::Idle || defender.state == UnitState::Dead;
 
     if *game_mode == GameMode::CombatScreen && combat_finished {
         *combat_exit_pause_timer += delta_time;

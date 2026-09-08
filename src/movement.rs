@@ -1,5 +1,4 @@
-use crate::undead::Undead;
-use crate::undead::UndeadState::Dead;
+use crate::unit::Unit;
 use std::collections::HashMap;
 
 pub struct MovementRange {
@@ -15,7 +14,7 @@ impl MovementRange {
         grid_rows: i32,
         enemy_x: i32,
         enemy_y: i32,
-        enemy: &Undead,
+        enemy: &Unit,
         blocked_tiles: &Vec<(i32, i32)>,
     ) -> (Vec<(i32, i32)>, HashMap<(i32, i32), (i32, i32)>) {
         let mut visited: Vec<(i32, i32)> = vec![(start_x, start_y)];
@@ -39,7 +38,7 @@ impl MovementRange {
                 let is_enemy = nx == enemy_x && ny == enemy_y;
                 let is_blocked_tile = blocked_tiles.contains(&(nx, ny));
 
-                let is_blocked_by_enemy = is_enemy && enemy.state != Dead;
+                let is_blocked_by_enemy = is_enemy && enemy.is_alive();
 
                 if in_bounds && !already_visited && !is_blocked_by_enemy && !is_blocked_tile {
                     visited.push((nx, ny));
@@ -56,11 +55,11 @@ impl MovementRange {
         enemy_x: i32,
         enemy_y: i32,
         attack_range: i32,
-        enemy: &Undead,
+        enemy: &Unit,
     ) -> Vec<(i32, i32)> {
         let mut valid_attack_positions: Vec<(i32, i32)> = Vec::new();
 
-        if enemy.state == Dead {
+        if !enemy.is_alive() {
             return valid_attack_positions;
         }
 

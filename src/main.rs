@@ -6,17 +6,15 @@ mod assets;
 mod combat;
 mod cursor;
 mod game_mode;
-mod human;
 mod input;
 mod map;
 mod movement;
 mod ui;
-mod undead;
+mod unit;
 
 use cursor::Cursors;
-use human::Human;
 use movement::MovementRange;
-use undead::Undead;
+use unit::{Faction, Unit, UnitClass, UnitState};
 
 const TILE_SIZE: i32 = 48;
 const GRID_COLS: i32 = 25;
@@ -58,33 +56,44 @@ fn main() {
         is_selected: false,
     };
 
-    let mut soldier = Human {
+    let mut soldier = Unit {
         name: String::from("Soldier"),
+        faction: Faction::Human,
+        class: UnitClass::Soldier,
         grid_x: 5,
         grid_y: 5,
         screen_x: grid_to_screen_x(5),
         screen_y: grid_to_screen_y(5),
         move_points: 2,
         hp_points: 100,
+        hp_max_points: 100,
         path: Vec::new(),
-        state: human::HumanState::Idle,
+        state: UnitState::Idle,
         facing_left: false,
         attack_range: 1,
         attack_power: 20,
         defense: 5,
         attack_target: false,
-        hp_max_points: 100,
     };
 
-    let mut wraith = Undead {
+    let mut wraith = Unit {
         name: String::from("Wraith"),
+        faction: Faction::Undead,
+        class: UnitClass::Wraith,
         grid_x: 6,
         grid_y: 5,
+        screen_x: grid_to_screen_x(6),
+        screen_y: grid_to_screen_y(5),
+        move_points: 4,
         hp_points: 100,
-        defense: 10,
-        state: undead::UndeadState::Idle,
+        hp_max_points: 100,
+        path: Vec::new(),
+        state: UnitState::Idle,
         facing_left: false,
-        max_hp_points: 100,
+        attack_range: 1,
+        attack_power: 15,
+        defense: 10,
+        attack_target: false,
     };
 
     let mut attack_animation_started = false;
@@ -103,11 +112,15 @@ fn main() {
         soldier.update_position(delta_time);
         soldier.advance_path();
 
+        wraith.update_position(delta_time);
+        wraith.advance_path();
+
+        // combat -----------------------------------------------------------
         combat::start_attack_if_needed(
             &mut soldier,
             &mut wraith,
-            &mut assets.soldier_attack_animation,
-            &mut assets.soldier_attack_effect_animation,
+            &mut assets.soldier.attack,
+            assets.soldier.attack_effect.as_mut().unwrap(),
             &mut attack_animation_started,
             &mut game_mode,
             &mut soldier_combat_x,
@@ -117,17 +130,17 @@ fn main() {
         combat::resolve_attack(
             &mut soldier,
             &mut wraith,
-            &assets.soldier_attack_animation,
-            &mut assets.wraith_hurt_animation,
+            &assets.soldier.attack,
+            &mut assets.wraith.hurt,
             &mut attack_animation_started,
         );
         combat::update_hurt_state(
             &mut wraith,
             delta_time,
-            &mut assets.wraith_hurt_animation,
-            &mut assets.wraith_dying_animation,
+            &mut assets.wraith.hurt,
+            &mut assets.wraith.die,
         );
-        combat::update_dying_state(&mut wraith, delta_time, &mut assets.wraith_dying_animation);
+        combat::update_dying_state(&mut wraith, delta_time, &mut assets.wraith.die);
 
         combat::combat_exit_pause_timer(
             &mut wraith,
@@ -157,7 +170,7 @@ fn main() {
             wraith_target_x,
             &mut combat_entering_timer,
             delta_time,
-            &mut assets.soldier_attack_animation,
+            &mut assets.soldier.attack,
         );
 
         let (move_range, came_from) = if cursor.is_selected {
@@ -239,8 +252,8 @@ fn main() {
             click_consumed = true;
         }
 
-        if input::cancel_pressed(&rl) && soldier.state == human::HumanState::ChoosingPosition {
-            soldier.state = human::HumanState::Idle;
+        if input::cancel_pressed(&rl) && soldier.state == UnitState::ChoosingPosition {
+            soldier.state = UnitState::Idle;
         }
 
         cursor.update_cursor(
@@ -256,26 +269,30 @@ fn main() {
 
         // animations communes aux deux modes -----------------------------------
         let current_animation = match soldier.state {
-            human::HumanState::Idle => &mut assets.soldier_idle_animation,
-            human::HumanState::Walking => &mut assets.soldier_walking_animation,
-            human::HumanState::Combat => &mut assets.soldier_attack_animation,
-            human::HumanState::ChoosingPosition => &mut assets.soldier_idle_animation,
-            human::HumanState::CombatEntering => &mut assets.soldier_walking_animation,
+            UnitState::Idle => &mut assets.soldier.idle,
+            UnitState::Walking => &mut assets.soldier.walk,
+            UnitState::Attacking => &mut assets.soldier.attack,
+            UnitState::ChoosingPosition => &mut assets.soldier.idle,
+            UnitState::CombatEntering => &mut assets.soldier.walk,
+            UnitState::Hurt => &mut assets.soldier.hurt,
+            UnitState::Dying => &mut assets.soldier.die,
+            UnitState::Dead => &mut assets.soldier.idle,
         };
 
         let current_wraith_animation = match wraith.state {
-            undead::UndeadState::Idle => &mut assets.wraith_idle_animation,
-            undead::UndeadState::Hurt => &mut assets.wraith_hurt_animation,
-            undead::UndeadState::Dying => &mut assets.wraith_dying_animation,
-            undead::UndeadState::Dead => &mut assets.wraith_idle_animation,
-            undead::UndeadState::CombatEntering => &mut assets.wraith_walking_animation,
+            UnitState::Idle => &mut assets.wraith.idle,
+            UnitState::Walking => &mut assets.wraith.walk,
+            UnitState::Attacking => &mut assets.wraith.attack,
+            UnitState::ChoosingPosition => &mut assets.wraith.idle,
+            UnitState::Hurt => &mut assets.wraith.hurt,
+            UnitState::Dying => &mut assets.wraith.die,
+            UnitState::Dead => &mut assets.wraith.idle,
+            UnitState::CombatEntering => &mut assets.wraith.walk,
         };
 
         current_animation.animation_update(delta_time);
-        if soldier.state == human::HumanState::Combat {
-            assets
-                .soldier_attack_effect_animation
-                .animation_update(delta_time);
+        if soldier.state == UnitState::Attacking {
+            assets.soldier.attack_effect.animation_update(delta_time);
         }
 
         current_wraith_animation.animation_update(delta_time);
@@ -317,7 +334,7 @@ fn main() {
                 );
             }
 
-            if soldier.state == human::HumanState::ChoosingPosition {
+            if soldier.state == UnitState::ChoosingPosition {
                 for (x, y) in &valid_attack_positions {
                     d.draw_rectangle(
                         x * TILE_SIZE,
@@ -366,7 +383,7 @@ fn main() {
                 Color::WHITE,
             );
 
-            if wraith.state != undead::UndeadState::Dead {
+            if wraith.is_alive() {
                 d.draw_texture_pro(
                     &current_wraith_animation.texture,
                     source_rec_wraith,
@@ -433,7 +450,7 @@ fn main() {
                 bar_width,
                 bar_height,
                 wraith.hp_points,
-                wraith.max_hp_points,
+                wraith.hp_max_points,
             );
 
             d.draw_text_ex(
@@ -473,15 +490,15 @@ fn main() {
                 0.0,
                 Color::WHITE,
             );
-            if soldier.state == human::HumanState::Combat {
-                let mut source_rec_effect =
-                    assets.soldier_attack_effect_animation.animation_frame();
+            if soldier.state == UnitState::Attacking {
+                let effect_animation = assets.soldier.attack_effect.as_ref().unwrap();
+                let mut source_rec_effect = effect_animation.animation_frame();
                 if soldier.facing_left {
                     source_rec_effect.width = -source_rec_effect.width;
                 }
 
                 d.draw_texture_pro(
-                    &assets.soldier_attack_effect_animation.texture,
+                    &effect_animation.texture,
                     source_rec_effect,
                     Rectangle {
                         x: soldier_combat_x,
@@ -494,7 +511,7 @@ fn main() {
                     Color::WHITE,
                 );
             }
-            if wraith.state != undead::UndeadState::Dead {
+            if wraith.is_alive() {
                 d.draw_texture_pro(
                     &current_wraith_animation.texture,
                     source_rec_wraith,

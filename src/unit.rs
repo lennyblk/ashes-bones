@@ -1,33 +1,50 @@
 use crate::TILE_SIZE;
 
-#[derive(PartialEq)]
-pub enum HumanState {
-    Idle,
-    Walking,
-    Combat,
-    ChoosingPosition,
-    CombatEntering,
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+pub enum Faction {
+    Human,
+    Undead,
 }
 
-pub struct Human {
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+pub enum UnitClass {
+    Soldier,
+    Wraith,
+}
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum UnitState {
+    Idle,
+    Walking,
+    ChoosingPosition,
+    CombatEntering,
+    Attacking,
+    Hurt,
+    Dying,
+    Dead,
+}
+
+pub struct Unit {
     pub name: String,
+    pub faction: Faction,
+    pub class: UnitClass,
     pub grid_x: i32,
     pub grid_y: i32,
     pub screen_x: f32,
     pub screen_y: f32,
     pub move_points: i32,
     pub hp_points: i32,
+    pub hp_max_points: i32,
     pub path: Vec<(i32, i32)>,
-    pub state: HumanState,
+    pub state: UnitState,
     pub facing_left: bool,
     pub attack_range: i32,
     pub attack_power: i32,
     pub defense: i32,
     pub attack_target: bool,
-    pub hp_max_points: i32,
 }
 
-impl Human {
+impl Unit {
     pub fn update_position(&mut self, delta_time: f32) {
         let target_x = self.grid_x * TILE_SIZE - 40;
         let target_y = self.grid_y * TILE_SIZE - 40;
@@ -35,7 +52,9 @@ impl Human {
         let distance_x = target_x as f32 - self.screen_x;
         let distance_y = target_y as f32 - self.screen_y;
 
-        // abs (recup la valeur absolu de la distance restante) pour recup toujours un valeur positif que j'aille a gauche ou a droite, comme ca je snap pas trop tot si c'est negatif
+        // abs (recup la valeur absolu de la distance restante) pour recup toujours
+        // un valeur positif que j'aille a gauche ou a droite, comme ca je snap pas
+        // trop tot si c'est negatif
         if distance_x.abs() > 1.0 {
             self.screen_x += distance_x * delta_time * 3.0; // le chiffre est la vitesse de déplacement
         } else {
@@ -48,6 +67,7 @@ impl Human {
             self.screen_y = target_y as f32;
         }
     }
+
     pub fn advance_path(&mut self) {
         if self.path.is_empty() {
             return;
@@ -62,9 +82,9 @@ impl Human {
             self.path.remove(0);
             if self.path.is_empty() {
                 if self.attack_target {
-                    self.state = HumanState::Combat;
+                    self.state = UnitState::Attacking;
                 } else {
-                    self.state = HumanState::Idle;
+                    self.state = UnitState::Idle;
                 }
             }
             return;
@@ -77,5 +97,9 @@ impl Human {
 
         self.grid_x = target.0;
         self.grid_y = target.1;
+    }
+
+    pub fn is_alive(&self) -> bool {
+        self.state != UnitState::Dead
     }
 }
