@@ -86,6 +86,25 @@ fn main() {
         height: 64.0,
     };
 
+    let btn_retry = Rectangle {
+        x: SCREEN_WIDTH as f32 / 2.0 - 64.0,  // centré, largeur 128
+        y: SCREEN_HEIGHT as f32 / 2.0 + 60.0, // sous le texte
+        width: 128.0,
+        height: 48.0,
+    };
+    let btn_back = Rectangle {
+        x: btn_retry.x,
+        y: btn_retry.y + 48.0 + 10.0,
+        width: 128.0,
+        height: 48.0,
+    };
+    let btn_exit = Rectangle {
+        x: btn_retry.x,
+        y: btn_back.y + 48.0 + 10.0,
+        width: 128.0,
+        height: 48.0,
+    };
+
     let mut soldier = Unit {
         name: String::from("Soldier"),
         faction: Faction::Human,
@@ -103,7 +122,7 @@ fn main() {
         state: UnitState::Idle,
         facing_left: false,
         attack_range: 1,
-        attack_power: 20,
+        attack_power: 100,
         defense: 5,
         attack_target: false,
     };
@@ -112,10 +131,10 @@ fn main() {
         name: String::from("Wraith"),
         faction: Faction::Undead,
         class: UnitClass::Wraith,
-        grid_x: 6,
-        grid_y: 5,
-        screen_x: grid_to_screen_x(6),
-        screen_y: grid_to_screen_y(5),
+        grid_x: 5,
+        grid_y: 7,
+        screen_x: grid_to_screen_x(5),
+        screen_y: grid_to_screen_y(7),
         move_points: 2,
         move_points_remaining: 2,
         has_attacked: false,
@@ -129,6 +148,10 @@ fn main() {
         defense: 10,
         attack_target: false,
     };
+
+    // état de départ, pour le bouton retry
+    let soldier_initial = soldier.clone();
+    let wraith_initial = wraith.clone();
 
     let mut game_mode = game_mode::GameMode::GridScreen;
     let mut soldier_combat_x: f32 = 0.0;
@@ -160,6 +183,33 @@ fn main() {
         wraith.advance_path();
 
         let mut click_consumed = false;
+
+        // écran de fin : retry / back / exit --------------------------------
+        let game_over =
+            game_mode == game_mode::GameMode::Victory || game_mode == game_mode::GameMode::Defeat;
+        if game_over {
+            let clicked = mouse_is_clicked(&rl);
+            if input::is_button_clicked(mouse_position, clicked, btn_exit) {
+                break;
+            }
+            if input::is_button_clicked(mouse_position, clicked, btn_back) {
+                // TODO: retour au menu de titre
+            }
+            if input::is_button_clicked(mouse_position, clicked, btn_retry) {
+                soldier = soldier_initial.clone();
+                wraith = wraith_initial.clone();
+                game_mode = game_mode::GameMode::GridScreen;
+                current_turn = game_mode::TurnPhase::PlayerTurn;
+                enemy_turn_delay = 0.0;
+                active_attacker = None;
+                attack_animation_started = false;
+                combat_entering_timer = 0.0;
+                combat_ready_timer = 0.0;
+                combat_exit_pause_timer = 0.0;
+                cursor.is_selected = false;
+                click_consumed = true;
+            }
+        }
         let player_can_act = current_turn == game_mode::TurnPhase::PlayerTurn
             && game_mode == game_mode::GameMode::GridScreen
             && soldier.state == UnitState::Idle;
@@ -321,6 +371,15 @@ fn main() {
             }
             None => {}
         }
+
+        if game_mode == game_mode::GameMode::GridScreen {
+            if soldier.state == UnitState::Dead {
+                game_mode = game_mode::GameMode::Defeat;
+            } else if wraith.state == UnitState::Dead {
+                game_mode = game_mode::GameMode::Victory;
+            }
+        }
+
         if current_turn == game_mode::TurnPhase::EnemyTurn
             && enemy_turn_delay <= 0.0
             && game_mode == game_mode::GameMode::GridScreen
@@ -334,21 +393,22 @@ fn main() {
             active_attacker = None;
         }
 
-        let (move_range, came_from) = if cursor.is_selected {
-            MovementRange::compute_movement_range(
-                soldier.grid_x,
-                soldier.grid_y,
-                soldier.move_points_remaining,
-                GRID_COLS,
-                GRID_ROWS,
-                wraith.grid_x,
-                wraith.grid_y,
-                &wraith,
-                &blocked_tiles,
-            )
-        } else {
-            (Vec::new(), HashMap::new())
-        };
+        let (move_range, came_from) =
+            if cursor.is_selected && game_mode == game_mode::GameMode::GridScreen {
+                MovementRange::compute_movement_range(
+                    soldier.grid_x,
+                    soldier.grid_y,
+                    soldier.move_points_remaining,
+                    GRID_COLS,
+                    GRID_ROWS,
+                    wraith.grid_x,
+                    wraith.grid_y,
+                    &wraith,
+                    &blocked_tiles,
+                )
+            } else {
+                (Vec::new(), HashMap::new())
+            };
 
         input::cancel_pressed(&rl);
 
@@ -474,7 +534,10 @@ fn main() {
         let mut d = rl.begin_drawing(&thread);
 
         // Grid screen mode ------------------------------------------------------
-        if game_mode == game_mode::GameMode::GridScreen {
+        if game_mode == game_mode::GameMode::GridScreen
+            || game_mode == game_mode::GameMode::Victory
+            || game_mode == game_mode::GameMode::Defeat
+        {
             d.clear_background(Color::BEIGE);
             tile_map.draw(&mut d);
 
@@ -597,6 +660,51 @@ fn main() {
                 );
             }
 
+            let victory_text = "VICTORY";
+            let defeat_text = "DEFEAT";
+            let font_size = 65.0;
+            let vtext_size = assets.hud_font.measure_text(victory_text, font_size, 1.0);
+            let dtext_size = assets.hud_font.measure_text(defeat_text, font_size, 1.0);
+            if game_mode == game_mode::GameMode::Victory {
+                d.draw_text_ex(
+                    &assets.hud_font,
+                    victory_text,
+                    Vector2::new(
+                        SCREEN_WIDTH as f32 / 2.0 - vtext_size.x / 2.0,
+                        SCREEN_HEIGHT as f32 / 2.0 - vtext_size.y / 2.0,
+                    ),
+                    font_size,
+                    1.0,
+                    Color::GOLD,
+                );
+            } else if game_mode == game_mode::GameMode::Defeat {
+                d.draw_text_ex(
+                    &assets.hud_font,
+                    defeat_text,
+                    Vector2::new(
+                        SCREEN_WIDTH as f32 / 2.0 - dtext_size.x / 2.0,
+                        SCREEN_HEIGHT as f32 / 2.0 - dtext_size.y / 2.0,
+                    ),
+                    font_size,
+                    1.0,
+                    Color::RED,
+                );
+            }
+            if game_over {
+                for (texture, rect) in [
+                    (&assets.btn_retry, btn_retry),
+                    (&assets.btn_back, btn_back),
+                    (&assets.btn_exit, btn_exit),
+                ] {
+                    d.draw_texture_ex(
+                        texture,
+                        Vector2::new(rect.x, rect.y),
+                        0.0,
+                        1.0,
+                        Color::WHITE,
+                    );
+                }
+            }
             d.draw_texture_ex(
                 cursor.current_cursor_texture,
                 Vector2::new(mouse_position.x, mouse_position.y),

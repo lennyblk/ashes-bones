@@ -21,6 +21,9 @@ pub struct Assets {
     pub hud_font: Font,
     pub btn_end_turn: Texture2D,
     pub btn_wait: Texture2D,
+    pub btn_exit: Texture2D,
+    pub btn_retry: Texture2D,
+    pub btn_back: Texture2D,
     pub banner_your_turn: Texture2D,
     pub banner_enemy_turn: Texture2D,
 }
@@ -118,6 +121,15 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .unwrap();
     let btn_end_turn = rl
         .load_texture(thread, "assets/turnbased-ui/btn_end_turn_normal.png")
+        .unwrap();
+    let btn_retry = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_retry_normal.png")
+        .unwrap();
+    let btn_exit = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_exit_normal.png")
+        .unwrap();
+    let btn_back = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_back_normal.png")
         .unwrap();
     let btn_wait = rl
         .load_texture(thread, "assets/turnbased-ui/btn_wait_normal.png")
@@ -296,6 +308,9 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         combat_screen_background_texture,
         hud_font,
         btn_end_turn,
+        btn_retry,
+        btn_back,
+        btn_exit,
         btn_wait,
         banner_your_turn,
         banner_enemy_turn,
