@@ -19,6 +19,10 @@ pub struct Assets {
     pub mouse_select_texture: Texture2D,
     pub combat_screen_background_texture: Texture2D,
     pub hud_font: Font,
+    pub btn_end_turn: Texture2D,
+    pub btn_wait: Texture2D,
+    pub banner_your_turn: Texture2D,
+    pub banner_enemy_turn: Texture2D,
 }
 
 pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
@@ -112,7 +116,18 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
     let hud_font = rl
         .load_font(thread, "assets/fonts/BerkshireSwash-Regular.ttf")
         .unwrap();
-
+    let btn_end_turn = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_end_turn_normal.png")
+        .unwrap();
+    let btn_wait = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_wait_normal.png")
+        .unwrap();
+    let banner_your_turn = rl
+        .load_texture(thread, "assets/turnbased-ui/banner_your_turn.png")
+        .unwrap();
+    let banner_enemy_turn = rl
+        .load_texture(thread, "assets/turnbased-ui/banner_enemy_phase.png")
+        .unwrap();
     Assets {
         soldier: AnimationSet {
             idle: Animation {
@@ -280,5 +295,9 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         mouse_select_texture,
         combat_screen_background_texture,
         hud_font,
+        btn_end_turn,
+        btn_wait,
+        banner_your_turn,
+        banner_enemy_turn,
     }
 }

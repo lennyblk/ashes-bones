@@ -27,6 +27,11 @@ pub fn handle_movement_normal_click(
                 (unit.grid_x, unit.grid_y),
                 (cursor_grid_x, cursor_grid_y),
             );
+            unit.move_points_remaining -= MovementRange::path_cost(
+                came_from,
+                (unit.grid_x, unit.grid_y),
+                (cursor_grid_x, cursor_grid_y),
+            );
             unit.state = UnitState::Walking;
             unit.attack_target = false;
             unit.path = waypoints;
@@ -66,6 +71,11 @@ pub fn handle_movement_attack_click(
                 (unit.grid_x, unit.grid_y),
                 valid_attack_positions[0],
             );
+            unit.move_points_remaining -= MovementRange::path_cost(
+                came_from,
+                (unit.grid_x, unit.grid_y),
+                valid_attack_positions[0],
+            );
             unit.attack_target = true;
             unit.state = UnitState::Walking;
             unit.path = waypoints;
@@ -96,6 +106,11 @@ pub fn handle_movement_choosing_position_click(
             (unit.grid_x, unit.grid_y),
             (cursor_grid_x, cursor_grid_y),
         );
+        unit.move_points_remaining -= MovementRange::path_cost(
+            came_from,
+            (unit.grid_x, unit.grid_y),
+            (cursor_grid_x, cursor_grid_y),
+        );
         unit.attack_target = true;
         unit.state = UnitState::Walking;
         unit.path = waypoints;
@@ -107,4 +122,12 @@ pub fn handle_movement_choosing_position_click(
 
 pub fn cancel_pressed(rl: &RaylibHandle) -> bool {
     rl.is_key_pressed(KEY_B)
+}
+
+pub fn is_button_clicked(
+    mouse_position: Vector2,
+    mouse_clicked: bool,
+    button_rect: Rectangle,
+) -> bool {
+    mouse_clicked && button_rect.check_collision_point_rec(mouse_position)
 }

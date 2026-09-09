@@ -72,6 +72,26 @@ impl MovementRange {
         valid_attack_positions
     }
 
+    /// Nombre de cases parcourues de `start` à `target` (chaîne came_from).
+    pub fn path_cost(
+        came_from: &HashMap<(i32, i32), (i32, i32)>,
+        start: (i32, i32),
+        target: (i32, i32),
+    ) -> i32 {
+        let mut cost = 0;
+        let mut current = target;
+        while current != start {
+            match came_from.get(&current) {
+                Some(&prev) => {
+                    cost += 1;
+                    current = prev;
+                }
+                None => break,
+            }
+        }
+        cost
+    }
+
     pub fn build_waypoints(
         came_from: &HashMap<(i32, i32), (i32, i32)>,
         start: (i32, i32),

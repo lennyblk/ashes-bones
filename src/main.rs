@@ -22,6 +22,7 @@ const GRID_COLS: i32 = 25;
 const GRID_ROWS: i32 = 16;
 const SCREEN_WIDTH: i32 = GRID_COLS * TILE_SIZE;
 const SCREEN_HEIGHT: i32 = GRID_ROWS * TILE_SIZE;
+const ENEMY_TURN_DELAY: f32 = 0.5;
 
 fn main() {
     // init window
@@ -57,6 +58,34 @@ fn main() {
         is_selected: false,
     };
 
+    let btn_end_turn = Rectangle {
+        x: (SCREEN_WIDTH as f32) - 160.0 - 20.0,
+        y: (SCREEN_HEIGHT as f32) - 48.0 - 20.0,
+        width: 160.0,
+        height: 48.0,
+    };
+
+    let btn_wait = Rectangle {
+        x: (SCREEN_WIDTH as f32) - 160.0 - 20.0,
+        y: btn_end_turn.y - 48.0 - 10.0,
+        width: 160.0,
+        height: 48.0,
+    };
+
+    let banner_your_turn = Rectangle {
+        x: (SCREEN_WIDTH as f32) - 384.0 - 20.0,
+        y: 10.0,
+        width: 384.0,
+        height: 64.0,
+    };
+
+    let banner_enemy_turn = Rectangle {
+        x: (SCREEN_WIDTH as f32) - 384.0 - 20.0,
+        y: 10.0,
+        width: 384.0,
+        height: 64.0,
+    };
+
     let mut soldier = Unit {
         name: String::from("Soldier"),
         faction: Faction::Human,
@@ -66,6 +95,8 @@ fn main() {
         screen_x: grid_to_screen_x(6),
         screen_y: grid_to_screen_y(10),
         move_points: 2,
+        move_points_remaining: 2,
+        has_attacked: false,
         hp_points: 100,
         hp_max_points: 100,
         path: Vec::new(),
@@ -86,6 +117,8 @@ fn main() {
         screen_x: grid_to_screen_x(6),
         screen_y: grid_to_screen_y(5),
         move_points: 2,
+        move_points_remaining: 2,
+        has_attacked: false,
         hp_points: 100,
         hp_max_points: 100,
         path: Vec::new(),
@@ -109,22 +142,56 @@ fn main() {
     let mut attack_animation_started = false;
     let mut active_attacker: Option<Faction> = None;
 
+    let mut current_turn = game_mode::TurnPhase::PlayerTurn;
+    let mut enemy_turn_delay: f32 = 0.0;
+
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
 
+        let mouse_position = rl.get_mouse_position();
+        fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
+            rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+        }
         soldier.update_position(delta_time);
         soldier.advance_path();
 
         wraith.update_position(delta_time);
         wraith.advance_path();
 
-        if rl.is_key_pressed(KeyboardKey::KEY_T) {
-            if let Some(target) = ai::find_closest_target(&wraith, &[soldier.clone()]) {
-                ai::ai_attack_if_in_range(&mut wraith, &target);
-                if wraith.state != UnitState::Attacking {
-                    ai::ai_move_toward_target(&mut wraith, &target, &blocked_tiles);
-                }
+        let mut click_consumed = false;
+        let player_can_act = current_turn == game_mode::TurnPhase::PlayerTurn
+            && game_mode == game_mode::GameMode::GridScreen
+            && soldier.state == UnitState::Idle;
+
+        // bouton wait : le perso s'arrête là (utile avec plusieurs persos)
+        let wait_button_visible = player_can_act && soldier.can_wait();
+        if wait_button_visible
+            && input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), btn_wait)
+        {
+            soldier.wait();
+            cursor.is_selected = false;
+            click_consumed = true;
+        }
+
+        // fin de tour : bouton end turn, ou auto quand tous les persos ont fini
+        let end_turn_clicked =
+            input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), btn_end_turn);
+
+        let all_units_finished = soldier.has_finished_turn(&[wraith.clone()]);
+
+        if player_can_act && (end_turn_clicked || all_units_finished) {
+            current_turn = game_mode::TurnPhase::EnemyTurn;
+            enemy_turn_delay = ENEMY_TURN_DELAY;
+            cursor.is_selected = false;
+            click_consumed = true;
+        }
+
+        if current_turn == game_mode::TurnPhase::EnemyTurn && enemy_turn_delay > 0.0 {
+            enemy_turn_delay -= delta_time;
+            if enemy_turn_delay <= 0.0 {
+                enemy_turn_delay = 0.0;
+                ai::take_turn(&mut wraith, &[soldier.clone()], &blocked_tiles);
             }
         }
 
@@ -254,6 +321,14 @@ fn main() {
             }
             None => {}
         }
+        if current_turn == game_mode::TurnPhase::EnemyTurn
+            && enemy_turn_delay <= 0.0
+            && game_mode == game_mode::GameMode::GridScreen
+            && wraith.state == UnitState::Idle
+        {
+            current_turn = game_mode::TurnPhase::PlayerTurn;
+            soldier.start_turn();
+        }
 
         if active_attacker.is_some() && game_mode == game_mode::GameMode::GridScreen {
             active_attacker = None;
@@ -263,7 +338,7 @@ fn main() {
             MovementRange::compute_movement_range(
                 soldier.grid_x,
                 soldier.grid_y,
-                soldier.move_points,
+                soldier.move_points_remaining,
                 GRID_COLS,
                 GRID_ROWS,
                 wraith.grid_x,
@@ -275,17 +350,10 @@ fn main() {
             (Vec::new(), HashMap::new())
         };
 
-        let mouse_position = rl.get_mouse_position();
-        fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
-            rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-        }
-
         input::cancel_pressed(&rl);
 
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
-
-        let mut click_consumed = false;
 
         // if pour bouger le personnage
         if input::handle_movement_normal_click(
@@ -300,13 +368,18 @@ fn main() {
             click_consumed = true;
         }
 
-        let valid_attack_positions = MovementRange::compute_attackable_positions(
-            &move_range,
-            wraith.grid_x,
-            wraith.grid_y,
-            soldier.attack_range,
-            &wraith,
-        );
+        // une seule attaque par tour et par unité
+        let valid_attack_positions = if soldier.has_attacked {
+            Vec::new()
+        } else {
+            MovementRange::compute_attackable_positions(
+                &move_range,
+                wraith.grid_x,
+                wraith.grid_y,
+                soldier.attack_range,
+                &wraith,
+            )
+        };
         let wraith_attackable = !valid_attack_positions.is_empty();
 
         // if pour attaquer l'ennemi et bouger le personnage si il y a qu'une seule case possible
@@ -413,13 +486,47 @@ fn main() {
             //     d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
             // }
 
+            if current_turn == game_mode::TurnPhase::PlayerTurn {
+                d.draw_texture_ex(
+                    &assets.banner_your_turn,
+                    Vector2::new(banner_your_turn.x, banner_your_turn.y),
+                    0.0,
+                    1.0,
+                    Color::WHITE,
+                );
+                d.draw_texture_ex(
+                    &assets.btn_end_turn,
+                    Vector2::new(btn_end_turn.x, btn_end_turn.y),
+                    0.0,
+                    1.0,
+                    Color::WHITE,
+                );
+                if wait_button_visible {
+                    d.draw_texture_ex(
+                        &assets.btn_wait,
+                        Vector2::new(btn_wait.x, btn_wait.y),
+                        0.0,
+                        1.0,
+                        Color::WHITE,
+                    );
+                }
+            } else if current_turn == game_mode::TurnPhase::EnemyTurn {
+                d.draw_texture_ex(
+                    &assets.banner_enemy_turn,
+                    Vector2::new(banner_enemy_turn.x, banner_enemy_turn.y),
+                    0.0,
+                    1.0,
+                    Color::WHITE,
+                );
+            }
+
             for (x, y) in &move_range {
                 d.draw_rectangle(
                     x * TILE_SIZE,
                     y * TILE_SIZE,
                     TILE_SIZE,
                     TILE_SIZE,
-                    Color::new(0, 100, 255, 100),
+                    Color::new(0, 100, 255, 100), // bleu transparent
                 );
             }
 
@@ -430,7 +537,7 @@ fn main() {
                         y * TILE_SIZE,
                         TILE_SIZE,
                         TILE_SIZE,
-                        Color::new(255, 255, 0, 170),
+                        Color::new(255, 255, 0, 170), // jaune transparent
                     );
                 }
             }
@@ -441,7 +548,7 @@ fn main() {
                     wraith.grid_y * TILE_SIZE,
                     TILE_SIZE,
                     TILE_SIZE,
-                    Color::new(255, 0, 0, 180),
+                    Color::new(255, 0, 0, 180), // rouge transparent
                 );
             }
 

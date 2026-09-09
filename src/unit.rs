@@ -34,6 +34,8 @@ pub struct Unit {
     pub screen_x: f32,
     pub screen_y: f32,
     pub move_points: i32,
+    pub move_points_remaining: i32,
+    pub has_attacked: bool,
     pub hp_points: i32,
     pub hp_max_points: i32,
     pub path: Vec<(i32, i32)>,
@@ -102,5 +104,38 @@ impl Unit {
 
     pub fn is_alive(&self) -> bool {
         self.state != UnitState::Dead
+    }
+
+    // tour par tour ---------------------------------------------------------
+
+    pub fn start_turn(&mut self) {
+        self.move_points_remaining = self.move_points;
+        self.has_attacked = false;
+    }
+
+    pub fn has_moved(&self) -> bool {
+        self.move_points_remaining < self.move_points
+    }
+
+    pub fn can_wait(&self) -> bool {
+        self.state == UnitState::Idle && self.has_moved() && self.move_points_remaining > 0
+    }
+
+    pub fn wait(&mut self) {
+        self.move_points_remaining = 0;
+        self.has_attacked = true;
+    }
+
+    pub fn can_attack_any(&self, enemies: &[Unit]) -> bool {
+        enemies.iter().any(|enemy| {
+            let distance = (enemy.grid_x - self.grid_x).abs() + (enemy.grid_y - self.grid_y).abs();
+            enemy.is_alive() && distance <= self.attack_range
+        })
+    }
+
+    pub fn has_finished_turn(&self, enemies: &[Unit]) -> bool {
+        !self.is_alive()
+            || (self.move_points_remaining == 0
+                && (self.has_attacked || !self.can_attack_any(enemies)))
     }
 }

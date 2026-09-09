@@ -23,6 +23,15 @@ pub fn ai_move_toward_target(unit: &mut Unit, target: &Unit, blocked_tiles: &Vec
     if let Some(&destination) = closest {
         let path =
             MovementRange::build_waypoints(&came_from, (unit.grid_x, unit.grid_y), destination);
+        if path.is_empty() {
+            return; // déjà sur la meilleure case, rien à faire
+        }
+
+        // attaque automatique à l'arrivée si la case d'arrivée est à portée
+        let distance_at_arrival =
+            (destination.0 - target.grid_x).abs() + (destination.1 - target.grid_y).abs();
+        unit.attack_target = distance_at_arrival <= unit.attack_range;
+
         unit.path = path;
         unit.state = UnitState::Walking;
     }
@@ -46,5 +55,15 @@ pub fn ai_attack_if_in_range(attacker: &mut Unit, defender: &Unit) {
     if distance <= attacker.attack_range {
         attacker.state = UnitState::Attacking;
         attacker.attack_target = true;
+    }
+}
+
+pub fn take_turn(unit: &mut Unit, targets: &[Unit], blocked_tiles: &Vec<(i32, i32)>) {
+    unit.start_turn();
+    if let Some(target) = find_closest_target(unit, targets) {
+        ai_attack_if_in_range(unit, target);
+        if unit.state != UnitState::Attacking {
+            ai_move_toward_target(unit, target, blocked_tiles);
+        }
     }
 }

@@ -118,6 +118,7 @@ pub fn resolve_attack(
 
         attacker.state = UnitState::Idle;
         attacker.attack_target = false;
+        attacker.has_attacked = true;
         *attack_animation_started = false;
     }
 }
