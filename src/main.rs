@@ -524,46 +524,88 @@ fn main() {
             let padding = 50.0;
             let bar_y = padding;
 
-            ui::draw_health_bar(
-                &mut d,
-                padding,
-                bar_y,
-                bar_width,
-                bar_height,
-                soldier.hp_points,
-                soldier.hp_max_points,
-            );
-
-            ui::draw_health_bar(
-                &mut d,
-                SCREEN_WIDTH as f32 - padding - bar_width,
-                bar_y,
-                bar_width,
-                bar_height,
-                wraith.hp_points,
-                wraith.hp_max_points,
-            );
-
-            d.draw_text_ex(
-                &assets.hud_font,
-                &soldier.name,
-                Vector2::new(padding, bar_y + bar_height + 10.0),
-                24.0,
-                1.0,
-                Color::BLACK,
-            );
-
-            d.draw_text_ex(
-                &assets.hud_font,
-                &wraith.name,
-                Vector2::new(
+            if soldier.facing_left {
+                ui::draw_health_bar(
+                    &mut d,
                     SCREEN_WIDTH as f32 - padding - bar_width,
-                    bar_y + bar_height + 10.0,
-                ),
-                24.0,
-                1.0,
-                Color::BLACK,
-            );
+                    bar_y,
+                    bar_width,
+                    bar_height,
+                    soldier.hp_points,
+                    soldier.hp_max_points,
+                );
+                d.draw_text_ex(
+                    &assets.hud_font,
+                    &soldier.name,
+                    Vector2::new(
+                        SCREEN_WIDTH as f32 - padding - bar_width,
+                        bar_y + bar_height + 10.0,
+                    ),
+                    24.0,
+                    1.0,
+                    Color::BLACK,
+                );
+            } else {
+                ui::draw_health_bar(
+                    &mut d,
+                    padding,
+                    bar_y,
+                    bar_width,
+                    bar_height,
+                    soldier.hp_points,
+                    soldier.hp_max_points,
+                );
+                d.draw_text_ex(
+                    &assets.hud_font,
+                    &soldier.name,
+                    Vector2::new(padding, bar_y + bar_height + 10.0),
+                    24.0,
+                    1.0,
+                    Color::BLACK,
+                );
+            }
+
+            if wraith.facing_left {
+                ui::draw_health_bar(
+                    &mut d,
+                    SCREEN_WIDTH as f32 - padding - bar_width,
+                    bar_y,
+                    bar_width,
+                    bar_height,
+                    wraith.hp_points,
+                    wraith.hp_max_points,
+                );
+                d.draw_text_ex(
+                    &assets.hud_font,
+                    &wraith.name,
+                    Vector2::new(
+                        SCREEN_WIDTH as f32 - padding - bar_width,
+                        bar_y + bar_height + 10.0,
+                    ),
+                    24.0,
+                    1.0,
+                    Color::BLACK,
+                );
+            } else {
+                ui::draw_health_bar(
+                    &mut d,
+                    padding,
+                    bar_y,
+                    bar_width,
+                    bar_height,
+                    wraith.hp_points,
+                    wraith.hp_max_points,
+                );
+
+                d.draw_text_ex(
+                    &assets.hud_font,
+                    &wraith.name,
+                    Vector2::new(padding, bar_y + bar_height + 10.0),
+                    24.0,
+                    1.0,
+                    Color::BLACK,
+                );
+            }
             // -------------------------------------------------------------------------------
             let sprite_size = 500.0;
             let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;

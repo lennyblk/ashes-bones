@@ -34,6 +34,6 @@ pub fn draw_health_bar(
         y as i32,
         width as i32,
         height as i32,
-        Color::BLACK,
+        Color::WHITE,
     );
 }
