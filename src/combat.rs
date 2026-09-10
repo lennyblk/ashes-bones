@@ -76,14 +76,12 @@ pub fn enter_combat(
     }
 }
 
-// temps avec les deux persos en Idle pour preparer les minis jeux plus tard
 pub fn start_attack_after_ready(
     attacker: &mut Unit,
     defender: &Unit,
     attack_in_progress: bool,
     ready_timer: &mut f32,
     delta_time: f32,
-    attacker_attack_animation: &mut Animation,
 ) {
     if !attack_in_progress {
         return;
@@ -92,9 +90,7 @@ pub fn start_attack_after_ready(
     if attacker.state == UnitState::Idle && defender.state == UnitState::Idle {
         *ready_timer += delta_time;
         if *ready_timer >= 0.3 {
-            attacker.state = UnitState::Attacking;
-            attacker_attack_animation.current = 0;
-            attacker_attack_animation.finished = false;
+            attacker.state = UnitState::MiniGame;
             *ready_timer = 0.0;
         }
     }
@@ -106,9 +102,11 @@ pub fn resolve_attack(
     attacker_attack_animation: &Animation,
     defender_hurt_animation: &mut Animation,
     attack_animation_started: &mut bool,
+    damage_multiplier: f32,
 ) {
     if attacker.state == UnitState::Attacking && attacker_attack_animation.finished {
-        defender.hp_points -= attack_damage_dealt(attacker.attack_power, defender.defense);
+        defender.hp_points -= (attack_damage_dealt(attacker.attack_power, defender.defense) as f32
+            * damage_multiplier) as i32;
         if defender.hp_points < 0 {
             defender.hp_points = 0;
         }

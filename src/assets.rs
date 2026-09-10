@@ -19,6 +19,7 @@ pub struct Assets {
     pub mouse_select_texture: Texture2D,
     pub combat_screen_background_texture: Texture2D,
     pub hud_font: Font,
+    pub alert_font: Font,
     pub btn_end_turn: Texture2D,
     pub btn_wait: Texture2D,
     pub btn_exit: Texture2D,
@@ -119,6 +120,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
     let hud_font = rl
         .load_font(thread, "assets/fonts/BerkshireSwash-Regular.ttf")
         .unwrap();
+    let alert_font = rl.load_font(thread, "assets/fonts/ThaleahFat.ttf").unwrap();
     let btn_end_turn = rl
         .load_texture(thread, "assets/turnbased-ui/btn_end_turn_normal.png")
         .unwrap();
@@ -307,6 +309,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         mouse_select_texture,
         combat_screen_background_texture,
         hud_font,
+        alert_font,
         btn_end_turn,
         btn_retry,
         btn_back,

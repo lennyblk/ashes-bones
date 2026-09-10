@@ -22,6 +22,7 @@ pub enum UnitState {
     Hurt,
     Dying,
     Dead,
+    MiniGame,
 }
 
 #[derive(Clone)]

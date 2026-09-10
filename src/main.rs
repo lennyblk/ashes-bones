@@ -9,6 +9,7 @@ mod cursor;
 mod game_mode;
 mod input;
 mod map;
+mod minigame;
 mod movement;
 mod ui;
 mod unit;
@@ -132,9 +133,9 @@ fn main() {
         faction: Faction::Undead,
         class: UnitClass::Wraith,
         grid_x: 5,
-        grid_y: 7,
+        grid_y: 10,
         screen_x: grid_to_screen_x(5),
-        screen_y: grid_to_screen_y(7),
+        screen_y: grid_to_screen_y(10),
         move_points: 2,
         move_points_remaining: 2,
         has_attacked: false,
@@ -167,6 +168,11 @@ fn main() {
 
     let mut current_turn = game_mode::TurnPhase::PlayerTurn;
     let mut enemy_turn_delay: f32 = 0.0;
+
+    let mut timing_bar: Option<minigame::TimingBar> = None;
+    let mut damage_multiplier: f32 = 1.0;
+    let player_faction = Faction::Human;
+    let mut result_display: Option<(minigame::TimingResult, f32, f32)> = None; // alert qui pop au resultat du minigame
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -266,6 +272,13 @@ fn main() {
             (left_x, right_x)
         };
 
+        // faire disparaître le message de résultat du minigame après un certain temps
+        if let Some((_, time_left, _)) = &mut result_display {
+            *time_left -= delta_time;
+            if *time_left <= 0.0 {
+                result_display = None;
+            }
+        }
         match active_attacker {
             Some(Faction::Human) => {
                 combat::start_attack_if_needed(
@@ -294,14 +307,26 @@ fn main() {
                     attack_animation_started,
                     &mut combat_ready_timer,
                     delta_time,
-                    &mut assets.soldier.attack,
                 );
+                if let Some(result) = minigame::handle_minigame(
+                    &mut soldier,
+                    &mut wraith,
+                    player_faction,
+                    &mut timing_bar,
+                    &mut damage_multiplier,
+                    &rl,
+                    delta_time,
+                    &mut assets.soldier.attack,
+                ) {
+                    result_display = Some((result, 1.0, damage_multiplier));
+                }
                 combat::resolve_attack(
                     &mut soldier,
                     &mut wraith,
                     &assets.soldier.attack,
                     &mut assets.wraith.hurt,
                     &mut attack_animation_started,
+                    damage_multiplier,
                 );
                 combat::update_hurt_state(
                     &mut wraith,
@@ -345,14 +370,26 @@ fn main() {
                     attack_animation_started,
                     &mut combat_ready_timer,
                     delta_time,
-                    &mut assets.wraith.attack,
                 );
+                if let Some(result) = minigame::handle_minigame(
+                    &mut wraith,
+                    &mut soldier,
+                    player_faction,
+                    &mut timing_bar,
+                    &mut damage_multiplier,
+                    &rl,
+                    delta_time,
+                    &mut assets.wraith.attack,
+                ) {
+                    result_display = Some((result, 1.0, damage_multiplier));
+                }
                 combat::resolve_attack(
                     &mut wraith,
                     &mut soldier,
                     &assets.wraith.attack,
                     &mut assets.soldier.hurt,
                     &mut attack_animation_started,
+                    damage_multiplier,
                 );
                 combat::update_hurt_state(
                     &mut soldier,
@@ -496,6 +533,7 @@ fn main() {
             UnitState::Hurt => &mut assets.soldier.hurt,
             UnitState::Dying => &mut assets.soldier.die,
             UnitState::Dead => &mut assets.soldier.idle,
+            UnitState::MiniGame => &mut assets.soldier.idle,
         };
 
         let current_wraith_animation = match wraith.state {
@@ -506,6 +544,7 @@ fn main() {
             UnitState::Hurt => &mut assets.wraith.hurt,
             UnitState::Dying => &mut assets.wraith.die,
             UnitState::Dead => &mut assets.wraith.idle,
+            UnitState::MiniGame => &mut assets.wraith.idle,
             UnitState::CombatEntering => &mut assets.wraith.walk,
         };
 
@@ -895,6 +934,77 @@ fn main() {
                     Vector2::new(0.0, 0.0),
                     0.0,
                     Color::WHITE,
+                );
+            }
+            // MiniGame -------------------------------------------------------------------------------
+            if let Some(bar) = &timing_bar {
+                let bar_x = SCREEN_WIDTH as f32 / 2.0 - 200.0;
+                let bar_y = SCREEN_HEIGHT as f32 - 120.0;
+                let bar_width = 400.0;
+                let bar_height = 30.0;
+
+                // fond de la barre
+                d.draw_rectangle(
+                    bar_x as i32,
+                    bar_y as i32,
+                    bar_width as i32,
+                    bar_height as i32,
+                    Color::DARKGRAY,
+                );
+
+                // zone good
+                let good_x = bar_x + bar.zone_start * bar_width;
+                let good_width = (bar.zone_end - bar.zone_start) * bar_width;
+                d.draw_rectangle(
+                    good_x as i32,
+                    bar_y as i32,
+                    good_width as i32,
+                    bar_height as i32,
+                    Color::YELLOW,
+                );
+
+                // zone perfect
+                let perfect_x = bar_x + bar.perfect_zone_start * bar_width;
+                let perfect_width = (bar.perfect_zone_end - bar.perfect_zone_start) * bar_width;
+                d.draw_rectangle(
+                    perfect_x as i32,
+                    bar_y as i32,
+                    perfect_width as i32,
+                    bar_height as i32,
+                    Color::GREEN,
+                );
+
+                // curseur (ligne blanche qui bouge)
+                let cursor_x = bar_x + bar.cursor_position * bar_width;
+                d.draw_rectangle(
+                    cursor_x as i32 - 2,
+                    bar_y as i32 - 5,
+                    4,
+                    bar_height as i32 + 10,
+                    Color::WHITE,
+                );
+            }
+            if let Some((result, _, multiplier)) = &result_display {
+                // _ c'est le "time_left" qu'on a pas besoin d'utiliser ici
+
+                let (text, color) = match result {
+                    minigame::TimingResult::Bad => ("BAD", Color::RED),
+                    minigame::TimingResult::Good => ("GOOD", Color::ORANGE),
+                    minigame::TimingResult::Perfect => ("PERFECT", Color::LIME),
+                };
+                let full_text = format!("{} x{:.1}", text, multiplier);
+
+                let text_size = assets.hud_font.measure_text(&full_text, 40.0, 1.0);
+                d.draw_text_ex(
+                    &assets.alert_font,
+                    &full_text,
+                    Vector2::new(
+                        SCREEN_WIDTH as f32 / 2.0 - text_size.x / 2.0,
+                        SCREEN_HEIGHT as f32 / 2.0 - text_size.y / 2.0 - 350.0,
+                    ),
+                    40.0,
+                    1.0,
+                    color,
                 );
             }
         }
