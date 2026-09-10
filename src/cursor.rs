@@ -1,18 +1,22 @@
 use crate::TILE_SIZE;
 use raylib::prelude::*;
 
-pub struct Cursors<'a> {
-    pub current_cursor_texture: &'a Texture2D,
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum CursorType {
+    Normal,
+    Hover,
+    Click,
+}
+
+pub struct Cursors {
+    pub cursor_type: CursorType,
     pub position: Vector2,
     pub is_selected: bool,
 }
 
-impl<'a> Cursors<'a> {
+impl Cursors {
     pub fn update_cursor(
         &mut self,
-        normal_texture: &'a Texture2D,
-        hover_texture: &'a Texture2D,
-        click_texture: &'a Texture2D,
         cursor_grid_x: i32,
         cursor_grid_y: i32,
         char_grid_x: i32,
@@ -29,12 +33,12 @@ impl<'a> Cursors<'a> {
             }
         }
 
-        self.current_cursor_texture = if self.is_selected {
-            click_texture
+        self.cursor_type = if self.is_selected {
+            CursorType::Click
         } else if is_hovering {
-            hover_texture
+            CursorType::Hover
         } else {
-            normal_texture
+            CursorType::Normal
         };
 
         self.position = Vector2::new(

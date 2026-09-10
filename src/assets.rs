@@ -1,4 +1,6 @@
 use crate::animation::Animation;
+use crate::cursor::CursorType;
+use crate::unit::UnitState;
 use raylib::prelude::*;
 
 pub struct AnimationSet {
@@ -8,6 +10,22 @@ pub struct AnimationSet {
     pub attack_effect: Animation,
     pub hurt: Animation,
     pub die: Animation,
+}
+
+impl AnimationSet {
+    pub fn for_state_mut(&mut self, state: UnitState) -> &mut Animation {
+        match state {
+            UnitState::Idle => &mut self.idle,
+            UnitState::Walking => &mut self.walk,
+            UnitState::Attacking => &mut self.attack,
+            UnitState::ChoosingPosition => &mut self.idle,
+            UnitState::CombatEntering => &mut self.walk,
+            UnitState::Hurt => &mut self.hurt,
+            UnitState::Dying => &mut self.die,
+            UnitState::Dead => &mut self.idle,
+            UnitState::MiniGame => &mut self.idle,
+        }
+    }
 }
 
 pub struct Assets {
@@ -27,6 +45,16 @@ pub struct Assets {
     pub btn_back: Texture2D,
     pub banner_your_turn: Texture2D,
     pub banner_enemy_turn: Texture2D,
+}
+
+impl Assets {
+    pub fn cursor_texture(&self, cursor_type: CursorType) -> &Texture2D {
+        match cursor_type {
+            CursorType::Normal => &self.mouse_normal_texture,
+            CursorType::Hover => &self.mouse_hover_texture,
+            CursorType::Click => &self.mouse_click_texture,
+        }
+    }
 }
 
 pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {

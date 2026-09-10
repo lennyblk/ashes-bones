@@ -123,12 +123,10 @@ pub fn resolve_attack(
 
 pub fn update_hurt_state(
     defender: &mut Unit,
-    delta_time: f32,
-    defender_hurt_animation: &mut Animation,
+    defender_hurt_animation: &Animation,
     defender_dying_animation: &mut Animation,
 ) {
     if defender.state == UnitState::Hurt {
-        defender_hurt_animation.animation_update(delta_time);
         if defender_hurt_animation.finished {
             if defender.hp_points == 0 {
                 defender_dying_animation.current = 0;
@@ -141,13 +139,8 @@ pub fn update_hurt_state(
     }
 }
 
-pub fn update_dying_state(
-    defender: &mut Unit,
-    delta_time: f32,
-    defender_dying_animation: &mut Animation,
-) {
+pub fn update_dying_state(defender: &mut Unit, defender_dying_animation: &Animation) {
     if defender.state == UnitState::Dying {
-        defender_dying_animation.animation_update(delta_time);
         if defender_dying_animation.finished {
             defender.state = UnitState::Dead;
         }

@@ -11,10 +11,11 @@ mod input;
 mod map;
 mod minigame;
 mod movement;
+mod render;
 mod ui;
 mod unit;
 
-use cursor::Cursors;
+use cursor::{CursorType, Cursors};
 use movement::MovementRange;
 use unit::{Faction, Unit, UnitClass, UnitState};
 
@@ -51,7 +52,7 @@ fn main() {
     let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
 
     let mut cursor = Cursors {
-        current_cursor_texture: &assets.mouse_normal_texture,
+        cursor_type: CursorType::Normal,
         position: Vector2::new(
             (cursor_grid_x * TILE_SIZE) as f32,
             (cursor_grid_y * TILE_SIZE) as f32,
@@ -59,52 +60,7 @@ fn main() {
         is_selected: false,
     };
 
-    let btn_end_turn = Rectangle {
-        x: (SCREEN_WIDTH as f32) - 160.0 - 20.0,
-        y: (SCREEN_HEIGHT as f32) - 48.0 - 20.0,
-        width: 160.0,
-        height: 48.0,
-    };
-
-    let btn_wait = Rectangle {
-        x: (SCREEN_WIDTH as f32) - 160.0 - 20.0,
-        y: btn_end_turn.y - 48.0 - 10.0,
-        width: 160.0,
-        height: 48.0,
-    };
-
-    let banner_your_turn = Rectangle {
-        x: (SCREEN_WIDTH as f32) - 384.0 - 20.0,
-        y: 10.0,
-        width: 384.0,
-        height: 64.0,
-    };
-
-    let banner_enemy_turn = Rectangle {
-        x: (SCREEN_WIDTH as f32) - 384.0 - 20.0,
-        y: 10.0,
-        width: 384.0,
-        height: 64.0,
-    };
-
-    let btn_retry = Rectangle {
-        x: SCREEN_WIDTH as f32 / 2.0 - 64.0,  // centré, largeur 128
-        y: SCREEN_HEIGHT as f32 / 2.0 + 60.0, // sous le texte
-        width: 128.0,
-        height: 48.0,
-    };
-    let btn_back = Rectangle {
-        x: btn_retry.x,
-        y: btn_retry.y + 48.0 + 10.0,
-        width: 128.0,
-        height: 48.0,
-    };
-    let btn_exit = Rectangle {
-        x: btn_retry.x,
-        y: btn_back.y + 48.0 + 10.0,
-        width: 128.0,
-        height: 48.0,
-    };
+    let hud = ui::HudRects::new();
 
     let mut soldier = Unit {
         name: String::from("Soldier"),
@@ -195,13 +151,13 @@ fn main() {
             game_mode == game_mode::GameMode::Victory || game_mode == game_mode::GameMode::Defeat;
         if game_over {
             let clicked = mouse_is_clicked(&rl);
-            if input::is_button_clicked(mouse_position, clicked, btn_exit) {
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_exit) {
                 break;
             }
-            if input::is_button_clicked(mouse_position, clicked, btn_back) {
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_back) {
                 // TODO: retour au menu de titre
             }
-            if input::is_button_clicked(mouse_position, clicked, btn_retry) {
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_retry) {
                 soldier = soldier_initial.clone();
                 wraith = wraith_initial.clone();
                 game_mode = game_mode::GameMode::GridScreen;
@@ -223,7 +179,7 @@ fn main() {
         // bouton wait : le perso s'arrête là (utile avec plusieurs persos)
         let wait_button_visible = player_can_act && soldier.can_wait();
         if wait_button_visible
-            && input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), btn_wait)
+            && input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_wait)
         {
             soldier.wait();
             cursor.is_selected = false;
@@ -232,7 +188,7 @@ fn main() {
 
         // fin de tour : bouton end turn, ou auto quand tous les persos ont fini
         let end_turn_clicked =
-            input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), btn_end_turn);
+            input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_end_turn);
 
         let all_units_finished = soldier.has_finished_turn(&[wraith.clone()]);
 
@@ -328,13 +284,8 @@ fn main() {
                     &mut attack_animation_started,
                     damage_multiplier,
                 );
-                combat::update_hurt_state(
-                    &mut wraith,
-                    delta_time,
-                    &mut assets.wraith.hurt,
-                    &mut assets.wraith.die,
-                );
-                combat::update_dying_state(&mut wraith, delta_time, &mut assets.wraith.die);
+                combat::update_hurt_state(&mut wraith, &assets.wraith.hurt, &mut assets.wraith.die);
+                combat::update_dying_state(&mut wraith, &assets.wraith.die);
                 combat::combat_exit_pause_timer(
                     &mut wraith,
                     attack_animation_started,
@@ -393,11 +344,10 @@ fn main() {
                 );
                 combat::update_hurt_state(
                     &mut soldier,
-                    delta_time,
-                    &mut assets.soldier.hurt,
+                    &assets.soldier.hurt,
                     &mut assets.soldier.die,
                 );
-                combat::update_dying_state(&mut soldier, delta_time, &mut assets.soldier.die);
+                combat::update_dying_state(&mut soldier, &assets.soldier.die);
                 combat::combat_exit_pause_timer(
                     &mut soldier,
                     attack_animation_started,
@@ -513,9 +463,6 @@ fn main() {
         }
 
         cursor.update_cursor(
-            &assets.mouse_normal_texture,
-            &assets.mouse_hover_texture,
-            &assets.mouse_click_texture,
             cursor_grid_x,
             cursor_grid_y,
             soldier.grid_x,
@@ -523,490 +470,41 @@ fn main() {
             mouse_is_clicked(&rl) && !click_consumed,
         );
 
-        // animations communes aux deux modes -----------------------------------
-        let current_animation = match soldier.state {
-            UnitState::Idle => &mut assets.soldier.idle,
-            UnitState::Walking => &mut assets.soldier.walk,
-            UnitState::Attacking => &mut assets.soldier.attack,
-            UnitState::ChoosingPosition => &mut assets.soldier.idle,
-            UnitState::CombatEntering => &mut assets.soldier.walk,
-            UnitState::Hurt => &mut assets.soldier.hurt,
-            UnitState::Dying => &mut assets.soldier.die,
-            UnitState::Dead => &mut assets.soldier.idle,
-            UnitState::MiniGame => &mut assets.soldier.idle,
-        };
-
-        let current_wraith_animation = match wraith.state {
-            UnitState::Idle => &mut assets.wraith.idle,
-            UnitState::Walking => &mut assets.wraith.walk,
-            UnitState::Attacking => &mut assets.wraith.attack,
-            UnitState::ChoosingPosition => &mut assets.wraith.idle,
-            UnitState::Hurt => &mut assets.wraith.hurt,
-            UnitState::Dying => &mut assets.wraith.die,
-            UnitState::Dead => &mut assets.wraith.idle,
-            UnitState::MiniGame => &mut assets.wraith.idle,
-            UnitState::CombatEntering => &mut assets.wraith.walk,
-        };
-
-        current_animation.animation_update(delta_time);
-        if soldier.state == UnitState::Attacking {
-            assets.soldier.attack_effect.animation_update(delta_time);
-        }
-
-        current_wraith_animation.animation_update(delta_time);
-        if wraith.state == UnitState::Attacking {
-            assets.wraith.attack_effect.animation_update(delta_time);
-        }
-
-        let mut source_rec_soldier = current_animation.animation_frame();
-        let mut source_rec_wraith = current_wraith_animation.animation_frame();
-
-        if soldier.facing_left {
-            source_rec_soldier.width = -source_rec_soldier.width;
-        }
-
-        if wraith.facing_left {
-            source_rec_wraith.width = -source_rec_wraith.width;
-        }
-
         // drawing --------------------------------------------------------------
         let mut d = rl.begin_drawing(&thread);
 
-        // Grid screen mode ------------------------------------------------------
-        if game_mode == game_mode::GameMode::GridScreen
-            || game_mode == game_mode::GameMode::Victory
-            || game_mode == game_mode::GameMode::Defeat
-        {
-            d.clear_background(Color::BEIGE);
-            tile_map.draw(&mut d);
-
-            // for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
-            //     d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
-            // }
-            //
-            // for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
-            //     d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
-            // }
-
-            if current_turn == game_mode::TurnPhase::PlayerTurn {
-                d.draw_texture_ex(
-                    &assets.banner_your_turn,
-                    Vector2::new(banner_your_turn.x, banner_your_turn.y),
-                    0.0,
-                    1.0,
-                    Color::WHITE,
-                );
-                d.draw_texture_ex(
-                    &assets.btn_end_turn,
-                    Vector2::new(btn_end_turn.x, btn_end_turn.y),
-                    0.0,
-                    1.0,
-                    Color::WHITE,
-                );
-                if wait_button_visible {
-                    d.draw_texture_ex(
-                        &assets.btn_wait,
-                        Vector2::new(btn_wait.x, btn_wait.y),
-                        0.0,
-                        1.0,
-                        Color::WHITE,
-                    );
-                }
-            } else if current_turn == game_mode::TurnPhase::EnemyTurn {
-                d.draw_texture_ex(
-                    &assets.banner_enemy_turn,
-                    Vector2::new(banner_enemy_turn.x, banner_enemy_turn.y),
-                    0.0,
-                    1.0,
-                    Color::WHITE,
-                );
-            }
-
-            for (x, y) in &move_range {
-                d.draw_rectangle(
-                    x * TILE_SIZE,
-                    y * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE,
-                    Color::new(0, 100, 255, 100), // bleu transparent
-                );
-            }
-
-            if soldier.state == UnitState::ChoosingPosition {
-                for (x, y) in &valid_attack_positions {
-                    d.draw_rectangle(
-                        x * TILE_SIZE,
-                        y * TILE_SIZE,
-                        TILE_SIZE,
-                        TILE_SIZE,
-                        Color::new(255, 255, 0, 170), // jaune transparent
-                    );
-                }
-            }
-
-            if wraith_attackable {
-                d.draw_rectangle(
-                    wraith.grid_x * TILE_SIZE,
-                    wraith.grid_y * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE,
-                    Color::new(255, 0, 0, 180), // rouge transparent
-                );
-            }
-
-            if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
-                d.draw_texture_ex(
-                    &assets.mouse_select_texture,
-                    Vector2::new(
-                        (cursor_grid_x * TILE_SIZE) as f32,
-                        (cursor_grid_y * TILE_SIZE) as f32,
-                    ),
-                    0.0,
-                    1.0,
-                    Color::WHITE,
-                );
-            }
-
-            if soldier.is_alive() {
-                d.draw_texture_pro(
-                    &current_animation.texture,
-                    source_rec_soldier,
-                    Rectangle {
-                        x: soldier.screen_x,
-                        y: soldier.screen_y,
-                        width: 128.0,
-                        height: 128.0,
-                    },
-                    Vector2::new(0.0, 0.0),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-
-            if wraith.is_alive() {
-                d.draw_texture_pro(
-                    &current_wraith_animation.texture,
-                    source_rec_wraith,
-                    Rectangle {
-                        x: wraith.screen_x,
-                        y: wraith.screen_y,
-                        width: 128.0,
-                        height: 128.0,
-                    },
-                    Vector2::new(0.0, 0.0),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-
-            let victory_text = "VICTORY";
-            let defeat_text = "DEFEAT";
-            let font_size = 65.0;
-            let vtext_size = assets.hud_font.measure_text(victory_text, font_size, 1.0);
-            let dtext_size = assets.hud_font.measure_text(defeat_text, font_size, 1.0);
-            if game_mode == game_mode::GameMode::Victory {
-                d.draw_text_ex(
-                    &assets.hud_font,
-                    victory_text,
-                    Vector2::new(
-                        SCREEN_WIDTH as f32 / 2.0 - vtext_size.x / 2.0,
-                        SCREEN_HEIGHT as f32 / 2.0 - vtext_size.y / 2.0,
-                    ),
-                    font_size,
-                    1.0,
-                    Color::GOLD,
-                );
-            } else if game_mode == game_mode::GameMode::Defeat {
-                d.draw_text_ex(
-                    &assets.hud_font,
-                    defeat_text,
-                    Vector2::new(
-                        SCREEN_WIDTH as f32 / 2.0 - dtext_size.x / 2.0,
-                        SCREEN_HEIGHT as f32 / 2.0 - dtext_size.y / 2.0,
-                    ),
-                    font_size,
-                    1.0,
-                    Color::RED,
-                );
-            }
-            if game_over {
-                for (texture, rect) in [
-                    (&assets.btn_retry, btn_retry),
-                    (&assets.btn_back, btn_back),
-                    (&assets.btn_exit, btn_exit),
-                ] {
-                    d.draw_texture_ex(
-                        texture,
-                        Vector2::new(rect.x, rect.y),
-                        0.0,
-                        1.0,
-                        Color::WHITE,
-                    );
-                }
-            }
-            d.draw_texture_ex(
-                cursor.current_cursor_texture,
-                Vector2::new(mouse_position.x, mouse_position.y),
-                0.0,
-                0.7,
-                Color::WHITE,
+        if game_mode == game_mode::GameMode::CombatScreen {
+            render::draw_combat_screen(
+                &mut d,
+                &mut assets,
+                delta_time,
+                &soldier,
+                &wraith,
+                soldier_combat_x,
+                wraith_combat_x,
+                timing_bar.as_ref(),
+                result_display.as_ref(),
             );
         } else {
-            // écran de combat --------------------------------------------------
-            d.draw_texture_pro(
-                &assets.combat_screen_background_texture,
-                Rectangle {
-                    x: 0.0,
-                    y: 0.0,
-                    width: assets.combat_screen_background_texture.width as f32,
-                    height: assets.combat_screen_background_texture.height as f32,
-                },
-                Rectangle {
-                    x: 0.0,
-                    y: 0.0,
-                    width: SCREEN_WIDTH as f32,
-                    height: SCREEN_HEIGHT as f32,
-                },
-                Vector2::new(0.0, 0.0),
-                0.0,
-                Color::WHITE,
+            render::draw_grid_screen(
+                &mut d,
+                &mut assets,
+                delta_time,
+                &tile_map,
+                &hud,
+                &soldier,
+                &wraith,
+                game_mode,
+                &current_turn,
+                wait_button_visible,
+                &move_range,
+                &valid_attack_positions,
+                wraith_attackable,
+                cursor_grid_x,
+                cursor_grid_y,
+                cursor.cursor_type,
+                mouse_position,
             );
-
-            // HUD combat -------------------------------------------------------
-            let bar_width = 300.0;
-            let bar_height = 30.0;
-            let padding = 50.0;
-            let bar_y = padding;
-
-            if soldier.facing_left {
-                ui::draw_health_bar(
-                    &mut d,
-                    SCREEN_WIDTH as f32 - padding - bar_width,
-                    bar_y,
-                    bar_width,
-                    bar_height,
-                    soldier.hp_points,
-                    soldier.hp_max_points,
-                );
-                d.draw_text_ex(
-                    &assets.hud_font,
-                    &soldier.name,
-                    Vector2::new(
-                        SCREEN_WIDTH as f32 - padding - bar_width,
-                        bar_y + bar_height + 10.0,
-                    ),
-                    24.0,
-                    1.0,
-                    Color::BLACK,
-                );
-            } else {
-                ui::draw_health_bar(
-                    &mut d,
-                    padding,
-                    bar_y,
-                    bar_width,
-                    bar_height,
-                    soldier.hp_points,
-                    soldier.hp_max_points,
-                );
-                d.draw_text_ex(
-                    &assets.hud_font,
-                    &soldier.name,
-                    Vector2::new(padding, bar_y + bar_height + 10.0),
-                    24.0,
-                    1.0,
-                    Color::BLACK,
-                );
-            }
-
-            if wraith.facing_left {
-                ui::draw_health_bar(
-                    &mut d,
-                    SCREEN_WIDTH as f32 - padding - bar_width,
-                    bar_y,
-                    bar_width,
-                    bar_height,
-                    wraith.hp_points,
-                    wraith.hp_max_points,
-                );
-                d.draw_text_ex(
-                    &assets.hud_font,
-                    &wraith.name,
-                    Vector2::new(
-                        SCREEN_WIDTH as f32 - padding - bar_width,
-                        bar_y + bar_height + 10.0,
-                    ),
-                    24.0,
-                    1.0,
-                    Color::BLACK,
-                );
-            } else {
-                ui::draw_health_bar(
-                    &mut d,
-                    padding,
-                    bar_y,
-                    bar_width,
-                    bar_height,
-                    wraith.hp_points,
-                    wraith.hp_max_points,
-                );
-
-                d.draw_text_ex(
-                    &assets.hud_font,
-                    &wraith.name,
-                    Vector2::new(padding, bar_y + bar_height + 10.0),
-                    24.0,
-                    1.0,
-                    Color::BLACK,
-                );
-            }
-            // -------------------------------------------------------------------------------
-            let sprite_size = 500.0;
-            let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
-
-            if soldier.is_alive() {
-                d.draw_texture_pro(
-                    &current_animation.texture,
-                    source_rec_soldier,
-                    Rectangle {
-                        x: soldier_combat_x,
-                        y: combat_y,
-                        width: sprite_size,
-                        height: sprite_size,
-                    },
-                    Vector2::new(0.0, 0.0),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-            if soldier.state == UnitState::Attacking {
-                let effect_animation = &assets.soldier.attack_effect;
-                let mut source_rec_effect = effect_animation.animation_frame();
-                if soldier.facing_left {
-                    source_rec_effect.width = -source_rec_effect.width;
-                }
-
-                d.draw_texture_pro(
-                    &effect_animation.texture,
-                    source_rec_effect,
-                    Rectangle {
-                        x: soldier_combat_x,
-                        y: combat_y,
-                        width: sprite_size,
-                        height: sprite_size,
-                    },
-                    Vector2::new(0.0, 0.0),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-            if wraith.state == UnitState::Attacking {
-                let effect_animation = &assets.wraith.attack_effect;
-                let mut source_rec_effect = effect_animation.animation_frame();
-                if wraith.facing_left {
-                    source_rec_effect.width = -source_rec_effect.width;
-                }
-
-                d.draw_texture_pro(
-                    &effect_animation.texture,
-                    source_rec_effect,
-                    Rectangle {
-                        x: wraith_combat_x,
-                        y: combat_y,
-                        width: sprite_size,
-                        height: sprite_size,
-                    },
-                    Vector2::new(0.0, 0.0),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-            if wraith.is_alive() {
-                d.draw_texture_pro(
-                    &current_wraith_animation.texture,
-                    source_rec_wraith,
-                    Rectangle {
-                        x: wraith_combat_x,
-                        y: combat_y,
-                        width: sprite_size,
-                        height: sprite_size,
-                    },
-                    Vector2::new(0.0, 0.0),
-                    0.0,
-                    Color::WHITE,
-                );
-            }
-            // MiniGame -------------------------------------------------------------------------------
-            if let Some(bar) = &timing_bar {
-                let bar_x = SCREEN_WIDTH as f32 / 2.0 - 200.0;
-                let bar_y = SCREEN_HEIGHT as f32 - 120.0;
-                let bar_width = 400.0;
-                let bar_height = 30.0;
-
-                // fond de la barre
-                d.draw_rectangle(
-                    bar_x as i32,
-                    bar_y as i32,
-                    bar_width as i32,
-                    bar_height as i32,
-                    Color::DARKGRAY,
-                );
-
-                // zone good
-                let good_x = bar_x + bar.zone_start * bar_width;
-                let good_width = (bar.zone_end - bar.zone_start) * bar_width;
-                d.draw_rectangle(
-                    good_x as i32,
-                    bar_y as i32,
-                    good_width as i32,
-                    bar_height as i32,
-                    Color::YELLOW,
-                );
-
-                // zone perfect
-                let perfect_x = bar_x + bar.perfect_zone_start * bar_width;
-                let perfect_width = (bar.perfect_zone_end - bar.perfect_zone_start) * bar_width;
-                d.draw_rectangle(
-                    perfect_x as i32,
-                    bar_y as i32,
-                    perfect_width as i32,
-                    bar_height as i32,
-                    Color::GREEN,
-                );
-
-                // curseur (ligne blanche qui bouge)
-                let cursor_x = bar_x + bar.cursor_position * bar_width;
-                d.draw_rectangle(
-                    cursor_x as i32 - 2,
-                    bar_y as i32 - 5,
-                    4,
-                    bar_height as i32 + 10,
-                    Color::WHITE,
-                );
-            }
-            if let Some((result, _, multiplier)) = &result_display {
-                // _ c'est le "time_left" qu'on a pas besoin d'utiliser ici
-
-                let (text, color) = match result {
-                    minigame::TimingResult::Bad => ("BAD", Color::RED),
-                    minigame::TimingResult::Good => ("GOOD", Color::ORANGE),
-                    minigame::TimingResult::Perfect => ("PERFECT", Color::LIME),
-                };
-                let full_text = format!("{} x{:.1}", text, multiplier);
-
-                let text_size = assets.hud_font.measure_text(&full_text, 40.0, 1.0);
-                d.draw_text_ex(
-                    &assets.alert_font,
-                    &full_text,
-                    Vector2::new(
-                        SCREEN_WIDTH as f32 / 2.0 - text_size.x / 2.0,
-                        SCREEN_HEIGHT as f32 / 2.0 - text_size.y / 2.0 - 350.0,
-                    ),
-                    40.0,
-                    1.0,
-                    color,
-                );
-            }
         }
     }
 }
