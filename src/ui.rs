@@ -10,6 +10,10 @@ pub struct HudRects {
     pub btn_retry: Rectangle,
     pub btn_back: Rectangle,
     pub btn_exit: Rectangle,
+    pub title: Rectangle,
+    pub btn_play_title_screen: Rectangle,
+    pub btn_settings_title_screen: Rectangle,
+    pub btn_exit_title_screen: Rectangle,
 }
 
 impl HudRects {
@@ -51,6 +55,37 @@ impl HudRects {
             width: 128.0,
             height: 48.0,
         };
+        // title screen ------------------------------------------------------
+        let title = Rectangle {
+            x: SCREEN_WIDTH as f32 / 2.0 - 256.0, // centré, largeur 512
+            y: 80.0,
+            width: 512.0,
+            height: 128.0,
+        };
+        let menu_btn_width = 144.0;
+        let menu_btn_height = 52.0;
+        let menu_btn_gap = 16.0;
+
+        let menu_total_height = menu_btn_height * 3.0 + menu_btn_gap * 2.0;
+        let menu_top = SCREEN_HEIGHT as f32 / 2.0 - menu_total_height / 2.0 + 60.0;
+        let btn_play_title_screen = Rectangle {
+            x: SCREEN_WIDTH as f32 / 2.0 - menu_btn_width / 2.0,
+            y: menu_top,
+            width: menu_btn_width,
+            height: menu_btn_height,
+        };
+        let btn_settings_title_screen = Rectangle {
+            x: btn_play_title_screen.x,
+            y: btn_play_title_screen.y + menu_btn_height + menu_btn_gap,
+            width: menu_btn_width,
+            height: menu_btn_height,
+        };
+        let btn_exit_title_screen = Rectangle {
+            x: btn_play_title_screen.x,
+            y: btn_settings_title_screen.y + menu_btn_height + menu_btn_gap,
+            width: menu_btn_width,
+            height: menu_btn_height,
+        };
         HudRects {
             btn_end_turn,
             btn_wait,
@@ -59,6 +94,10 @@ impl HudRects {
             btn_retry,
             btn_back,
             btn_exit,
+            title,
+            btn_play_title_screen,
+            btn_settings_title_screen,
+            btn_exit_title_screen,
         }
     }
 }

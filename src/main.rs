@@ -110,7 +110,7 @@ fn main() {
     let soldier_initial = soldier.clone();
     let wraith_initial = wraith.clone();
 
-    let mut game_mode = game_mode::GameMode::GridScreen;
+    let mut game_mode = game_mode::GameMode::TitleScreen;
     let mut soldier_combat_x: f32 = 0.0;
     let mut wraith_combat_x: f32 = 0.0;
     let mut combat_entering_timer: f32 = 0.0;
@@ -145,6 +145,21 @@ fn main() {
         wraith.advance_path();
 
         let mut click_consumed = false;
+
+        // title screen : play / settings / exit ------------------------------
+        if game_mode == game_mode::GameMode::TitleScreen {
+            let clicked = mouse_is_clicked(&rl);
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_exit_title_screen) {
+                break;
+            }
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_settings_title_screen) {
+                // TODO: écran settings
+            }
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_play_title_screen) {
+                game_mode = game_mode::GameMode::GridScreen;
+                click_consumed = true;
+            }
+        }
 
         // écran de fin : retry / back / exit --------------------------------
         let game_over =
@@ -473,7 +488,9 @@ fn main() {
         // drawing --------------------------------------------------------------
         let mut d = rl.begin_drawing(&thread);
 
-        if game_mode == game_mode::GameMode::CombatScreen {
+        if game_mode == game_mode::GameMode::TitleScreen {
+            render::draw_title_screen(&mut d, &assets, &hud, mouse_position);
+        } else if game_mode == game_mode::GameMode::CombatScreen {
             render::draw_combat_screen(
                 &mut d,
                 &mut assets,

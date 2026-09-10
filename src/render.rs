@@ -53,6 +53,64 @@ fn draw_unit_sprite(
     );
 }
 
+// Title screen ------------------------------------------------------------------
+pub fn draw_title_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &Assets,
+    hud: &HudRects,
+    mouse_position: Vector2,
+) {
+    d.clear_background(Color::BLACK);
+
+    for background in [
+        &assets.title_screen_background_texture_1,
+        &assets.title_screen_background_texture_2,
+        &assets.title_screen_background_texture_3,
+        &assets.title_screen_background_texture_4,
+        &assets.title_screen_background_texture_5,
+    ] {
+        draw_fullscreen_texture(d, background);
+    }
+
+    draw_texture_at(d, &assets.title, hud.title);
+    draw_texture_at(d, &assets.btn_play_title_screen, hud.btn_play_title_screen);
+    draw_texture_at(
+        d,
+        &assets.btn_settings_title_screen,
+        hud.btn_settings_title_screen,
+    );
+    draw_texture_at(d, &assets.btn_exit_title_screen, hud.btn_exit_title_screen);
+
+    d.draw_texture_ex(
+        assets.cursor_texture(CursorType::Normal),
+        Vector2::new(mouse_position.x, mouse_position.y),
+        0.0,
+        0.7,
+        Color::WHITE,
+    );
+}
+
+fn draw_fullscreen_texture(d: &mut RaylibDrawHandle, texture: &Texture2D) {
+    d.draw_texture_pro(
+        texture,
+        Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: texture.width as f32,
+            height: texture.height as f32,
+        },
+        Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: SCREEN_WIDTH as f32,
+            height: SCREEN_HEIGHT as f32,
+        },
+        Vector2::new(0.0, 0.0),
+        0.0,
+        Color::WHITE,
+    );
+}
+
 // Grid screen mode ------------------------------------------------------------
 pub fn draw_grid_screen(
     d: &mut RaylibDrawHandle,
@@ -218,25 +276,7 @@ pub fn draw_combat_screen(
     timing_bar: Option<&TimingBar>,
     result_display: Option<&(TimingResult, f32, f32)>,
 ) {
-    let background = &assets.combat_screen_background_texture;
-    d.draw_texture_pro(
-        background,
-        Rectangle {
-            x: 0.0,
-            y: 0.0,
-            width: background.width as f32,
-            height: background.height as f32,
-        },
-        Rectangle {
-            x: 0.0,
-            y: 0.0,
-            width: SCREEN_WIDTH as f32,
-            height: SCREEN_HEIGHT as f32,
-        },
-        Vector2::new(0.0, 0.0),
-        0.0,
-        Color::WHITE,
-    );
+    draw_fullscreen_texture(d, &assets.combat_screen_background_texture);
 
     // HUD combat ---------------------------------------------------------------
     draw_unit_hud(d, assets, soldier);
