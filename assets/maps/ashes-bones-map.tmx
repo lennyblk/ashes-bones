@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.12.2" orientation="orthogonal" renderorder="left-up" width="25" height="16" tilewidth="32" tileheight="32" infinite="0" nextlayerid="8" nextobjectid="1">
- <tileset firstgid="1" source="../../../../main-plains.tsx"/>
- <tileset firstgid="1513" source="../../../../waters.tsx"/>
- <tileset firstgid="2153" source="../../../../decorations.tsx"/>
- <tileset firstgid="2476" source="../../../../basiccamp.tsx"/>
+ <tileset firstgid="1" source="main-plains.tsx"/>
+ <tileset firstgid="1513" source="waters.tsx"/>
+ <tileset firstgid="2153" source="decorations.tsx"/>
+ <tileset firstgid="2476" source="basiccamp.tsx"/>
  <layer id="1" name="ground" width="25" height="16">
   <data encoding="csv">
 969,1654,1655,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,969,
