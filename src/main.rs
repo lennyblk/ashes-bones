@@ -127,7 +127,7 @@ fn main() {
 
     let mut timing_bar: Option<minigame::TimingBar> = None;
     let mut damage_multiplier: f32 = 1.0;
-    let player_faction = Faction::Human;
+    let mut player_faction = Faction::Human;
     let mut result_display: Option<(minigame::TimingResult, f32, f32)> = None; // alert qui pop au resultat du minigame
 
     // run window --------------------------------------------------------------
@@ -156,9 +156,22 @@ fn main() {
                 // TODO: écran settings
             }
             if input::is_button_clicked(mouse_position, clicked, hud.btn_play_title_screen) {
-                game_mode = game_mode::GameMode::GridScreen;
+                game_mode = game_mode::GameMode::FactionSelectionScreen;
                 click_consumed = true;
             }
+        }
+
+        // Faction selection screen : Human / Undead --------------------------------
+        if game_mode == game_mode::GameMode::FactionSelectionScreen
+            && !click_consumed
+            && mouse_is_clicked(&rl)
+        {
+            player_faction = if mouse_position.x < SCREEN_WIDTH as f32 / 2.0 {
+                Faction::Human
+            } else {
+                Faction::Undead
+            };
+            game_mode = game_mode::GameMode::GridScreen;
         }
 
         // écran de fin : retry / back / exit --------------------------------
@@ -490,9 +503,18 @@ fn main() {
 
         if game_mode == game_mode::GameMode::TitleScreen {
             render::draw_title_screen(&mut d, &assets, &hud, mouse_position);
+        } else if game_mode == game_mode::GameMode::FactionSelectionScreen {
+            render::draw_faction_selection_screen(
+                &mut d,
+                &thread,
+                &mut assets,
+                delta_time,
+                mouse_position,
+            );
         } else if game_mode == game_mode::GameMode::CombatScreen {
             render::draw_combat_screen(
                 &mut d,
+                &thread,
                 &mut assets,
                 delta_time,
                 &soldier,
@@ -505,6 +527,7 @@ fn main() {
         } else {
             render::draw_grid_screen(
                 &mut d,
+                &thread,
                 &mut assets,
                 delta_time,
                 &tile_map,

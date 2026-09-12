@@ -111,9 +111,270 @@ fn draw_fullscreen_texture(d: &mut RaylibDrawHandle, texture: &Texture2D) {
     );
 }
 
+// Faction selection screen ------------------------------------------------------
+fn draw_idle_card(
+    d: &mut RaylibDrawHandle,
+    thread: &RaylibThread,
+    animation: &mut Animation,
+    center_x: f32,
+    top_y: f32,
+    sprite_size: f32,
+    delta_time: f32,
+) {
+    animation.animation_update(delta_time);
+    let frame = animation.animation_frame();
+    // garde le ratio d'origine de la frame pour ne pas déformer le sprite
+    let scale = (sprite_size / frame.width).min(sprite_size / frame.height);
+    let dest_width = frame.width * scale;
+    let dest_height = frame.height * scale;
+    // raylib "batch" les draw calls (le vrai rendu GPU arrive au flush du batch, pas
+    // ici) alors que set_texture_filter change l'état de la texture immédiatement :
+    // remettre "nearest" juste après ce draw_texture_pro annulerait le bilinéaire
+    // avant même que ce dessin soit vraiment envoyé au GPU. On laisse donc en
+    // bilinéaire ; draw_grid_screen/draw_combat_screen remettent "nearest" eux-mêmes
+    // avant de dessiner, pour ne pas hériter de cet état.
+    animation
+        .texture
+        .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_BILINEAR);
+    d.draw_texture_pro(
+        &animation.texture,
+        frame,
+        Rectangle {
+            x: center_x - dest_width / 2.0,
+            y: top_y + (sprite_size - dest_height) / 2.0,
+            width: dest_width,
+            height: dest_height,
+        },
+        Vector2::new(0.0, 0.0),
+        0.0,
+        Color::WHITE,
+    );
+}
+
+/// centres des 3 colonnes de sprites pour une faction, centrées sur `center_x`
+fn faction_column_centers(center_x: f32, sprite_size: f32, col_gap: f32) -> [f32; 3] {
+    let total_width = sprite_size * 3.0 + col_gap * 2.0;
+    let first = center_x - total_width / 2.0 + sprite_size / 2.0;
+    [
+        first,
+        first + sprite_size + col_gap,
+        first + 2.0 * (sprite_size + col_gap),
+    ]
+}
+
+pub fn draw_faction_selection_screen(
+    d: &mut RaylibDrawHandle,
+    thread: &RaylibThread,
+    assets: &mut Assets,
+    delta_time: f32,
+    mouse_position: Vector2,
+) {
+    let half_width = SCREEN_WIDTH / 2;
+    d.draw_rectangle(
+        0,
+        0,
+        half_width,
+        SCREEN_HEIGHT,
+        Color::new(40, 70, 140, 255),
+    );
+    d.draw_rectangle(
+        half_width,
+        0,
+        SCREEN_WIDTH - half_width,
+        SCREEN_HEIGHT,
+        Color::new(140, 30, 30, 255),
+    );
+
+    // surbrillance du côté survolé par la souris
+    let hovered_x = if mouse_position.x < half_width as f32 {
+        0
+    } else {
+        half_width
+    };
+    d.draw_rectangle(
+        hovered_x,
+        0,
+        half_width,
+        SCREEN_HEIGHT,
+        Color::new(255, 255, 255, 15),
+    );
+
+    d.draw_rectangle(SCREEN_WIDTH / 2 - 2, 0, 4, SCREEN_HEIGHT, Color::WHITE);
+
+    let title = "Choose your faction";
+    let title_size = 64.0;
+    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        Vector2::new(SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0, 30.0),
+        title_size,
+        1.0,
+        Color::WHITE,
+    );
+
+    let human_center_x = SCREEN_WIDTH as f32 / 4.0;
+    let undead_center_x = SCREEN_WIDTH as f32 * 3.0 / 4.0;
+
+    for (label, center_x) in [("Human", human_center_x), ("Undead", undead_center_x)] {
+        let label_size = 48.0;
+        let label_text_size = assets.hud_font.measure_text(label, label_size, 1.0);
+        d.draw_text_ex(
+            &assets.hud_font,
+            label,
+            Vector2::new(center_x - label_text_size.x / 2.0, 130.0),
+            label_size,
+            1.0,
+            Color::WHITE,
+        );
+    }
+
+    let sprite_size = 170.0;
+    let col_gap = 16.0;
+    let row_gap = 20.0;
+    let rows_top = 240.0;
+    let rows_bottom = SCREEN_HEIGHT as f32;
+    let rows_height = sprite_size * 2.0 + row_gap;
+    let row1_y = rows_top + (rows_bottom - rows_top - rows_height) / 2.0;
+    let row2_y = row1_y + sprite_size + row_gap;
+
+    let human_cols = faction_column_centers(human_center_x, sprite_size, col_gap);
+    let undead_cols = faction_column_centers(undead_center_x, sprite_size, col_gap);
+
+    // Human : soldier / cavalry / assassin en haut, longbowman / mage / priest en bas
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.soldier.idle,
+        human_cols[0],
+        row1_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.cavalry.idle,
+        human_cols[1],
+        row1_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.assassin.idle,
+        human_cols[2],
+        row1_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.longbowman.idle,
+        human_cols[0],
+        row2_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.mage.idle,
+        human_cols[1],
+        row2_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.priest.idle,
+        human_cols[2],
+        row2_y,
+        sprite_size,
+        delta_time,
+    );
+
+    // Undead : blood knight / banshee / wraith en haut, ghoul / necromancer / skeleton en bas
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.blood_knight.idle,
+        undead_cols[0],
+        row1_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.banshee.idle,
+        undead_cols[1],
+        row1_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.wraith.idle,
+        undead_cols[2],
+        row1_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.ghoul.idle,
+        undead_cols[0],
+        row2_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.necromancer.idle,
+        undead_cols[1],
+        row2_y,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        thread,
+        &mut assets.skeleton.idle,
+        undead_cols[2],
+        row2_y,
+        sprite_size,
+        delta_time,
+    );
+
+    d.draw_texture_ex(
+        assets.cursor_texture(CursorType::Normal),
+        Vector2::new(mouse_position.x, mouse_position.y),
+        0.0,
+        0.7,
+        Color::WHITE,
+    );
+}
+
+/// remet le filtrage "nearest" (pixel-art net) sur les textures idle des unités
+/// jouables, au cas où l'écran de sélection de faction les aurait laissées en
+/// bilinéaire (voir draw_idle_card)
+fn reset_unit_texture_filters(assets: &Assets, thread: &RaylibThread) {
+    for texture in [&assets.soldier.idle.texture, &assets.wraith.idle.texture] {
+        texture.set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
+    }
+}
+
 // Grid screen mode ------------------------------------------------------------
 pub fn draw_grid_screen(
     d: &mut RaylibDrawHandle,
+    thread: &RaylibThread,
     assets: &mut Assets,
     delta_time: f32,
     tile_map: &TileMap,
@@ -131,6 +392,10 @@ pub fn draw_grid_screen(
     cursor_type: CursorType,
     mouse_position: Vector2,
 ) {
+    // l'écran de sélection de faction laisse ces textures en filtrage bilinéaire
+    // (voir draw_idle_card) ; on remet "nearest" avant de dessiner le pixel-art
+    reset_unit_texture_filters(assets, thread);
+
     d.clear_background(Color::BEIGE);
     tile_map.draw(d);
 
@@ -267,6 +532,7 @@ pub fn draw_grid_screen(
 // écran de combat ------------------------------------------------------------
 pub fn draw_combat_screen(
     d: &mut RaylibDrawHandle,
+    thread: &RaylibThread,
     assets: &mut Assets,
     delta_time: f32,
     soldier: &Unit,
@@ -276,6 +542,10 @@ pub fn draw_combat_screen(
     timing_bar: Option<&TimingBar>,
     result_display: Option<&(TimingResult, f32, f32)>,
 ) {
+    // l'écran de sélection de faction laisse ces textures en filtrage bilinéaire
+    // (voir draw_idle_card) ; on remet "nearest" avant de dessiner le pixel-art
+    reset_unit_texture_filters(assets, thread);
+
     draw_fullscreen_texture(d, &assets.combat_screen_background_texture);
 
     // HUD combat ---------------------------------------------------------------

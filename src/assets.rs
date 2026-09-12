@@ -592,8 +592,11 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .load_texture(thread, "assets/backgrounds/plains2.png")
         .unwrap();
     let hud_font = rl
-        .load_font(thread, "assets/fonts/BerkshireSwash-Regular.ttf")
+        .load_font_ex(thread, "assets/fonts/BerkshireSwash-Regular.ttf", 96, None)
         .unwrap();
+    hud_font
+        .texture()
+        .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_BILINEAR);
     let alert_font = rl.load_font(thread, "assets/fonts/ThaleahFat.ttf").unwrap();
     let btn_end_turn = rl
         .load_texture(thread, "assets/turnbased-ui/btn_end_turn_normal.png")
