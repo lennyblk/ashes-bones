@@ -104,7 +104,7 @@ pub fn handle_minigame(
     let bar = timing_bar.as_mut().unwrap();
     bar.update(delta_time);
 
-    if rl.is_key_pressed(KeyboardKey::KEY_SPACE) {
+    if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
         bar.try_hit();
     }
 
