@@ -106,8 +106,30 @@ fn main() {
         attack_target: false,
     };
 
-    // units[0] = soldier, units[1] = wraith
-    let mut units: Vec<Unit> = vec![soldier, wraith];
+    let cavalry = Unit {
+        name: String::from("Cavalry"),
+        faction: Faction::Human,
+        class: UnitClass::Cavalry,
+        grid_x: 7,
+        grid_y: 10,
+        screen_x: grid_to_screen_x(7),
+        screen_y: grid_to_screen_y(10),
+        move_points: 3,
+        move_points_remaining: 3,
+        has_attacked: false,
+        hp_points: 90,
+        hp_max_points: 90,
+        path: Vec::new(),
+        state: UnitState::Idle,
+        facing_left: false,
+        attack_range: 1,
+        attack_power: 70,
+        defense: 8,
+        attack_target: false,
+    };
+
+    // units[0] = soldier, units[1] = wraith, units[2] = cavalry
+    let mut units: Vec<Unit> = vec![soldier, wraith, cavalry];
 
     // état de départ, pour le bouton retry
     let units_initial = units.clone();
@@ -145,6 +167,9 @@ fn main() {
 
         units[1].update_position(delta_time);
         units[1].advance_path();
+
+        units[2].update_position(delta_time);
+        units[2].advance_path();
 
         let mut click_consumed = false;
 
@@ -546,6 +571,7 @@ fn main() {
                 &hud,
                 &units[0],
                 &units[1],
+                &units[2],
                 game_mode,
                 &current_turn,
                 wait_button_visible,

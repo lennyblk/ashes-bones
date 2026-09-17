@@ -9,6 +9,7 @@ pub enum Faction {
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum UnitClass {
     Soldier,
+    Cavalry,
     Wraith,
 }
 

@@ -381,6 +381,7 @@ pub fn draw_grid_screen(
     hud: &HudRects,
     soldier: &Unit,
     wraith: &Unit,
+    cavalry: &Unit,
     game_mode: GameMode,
     current_turn: &TurnPhase,
     wait_button_visible: bool,
@@ -486,6 +487,19 @@ pub fn draw_grid_screen(
             wraith,
             wraith.screen_x,
             wraith.screen_y,
+            128.0,
+            delta_time,
+        );
+    }
+
+    if cavalry.is_alive() {
+        let animation = assets.cavalry.for_state_mut(cavalry.state);
+        draw_unit_sprite(
+            d,
+            animation,
+            cavalry,
+            cavalry.screen_x,
+            cavalry.screen_y,
             128.0,
             delta_time,
         );
