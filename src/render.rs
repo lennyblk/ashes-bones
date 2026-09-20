@@ -431,7 +431,7 @@ pub fn draw_grid_screen(
         );
     }
 
-    if soldier.state == UnitState::ChoosingPosition {
+    if soldier.state == UnitState::ChoosingPosition || cavalry.state == UnitState::ChoosingPosition {
         for (x, y) in valid_attack_positions {
             d.draw_rectangle(
                 x * TILE_SIZE,

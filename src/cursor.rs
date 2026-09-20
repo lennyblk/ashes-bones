@@ -11,7 +11,6 @@ pub enum CursorType {
 pub struct Cursors {
     pub cursor_type: CursorType,
     pub position: Vector2,
-    pub is_selected: bool,
 }
 
 impl Cursors {
@@ -19,23 +18,12 @@ impl Cursors {
         &mut self,
         cursor_grid_x: i32,
         cursor_grid_y: i32,
-        char_grid_x: i32,
-        char_grid_y: i32,
-        mouse_just_clicked: bool,
+        is_hovering_selectable_unit: bool,
+        is_unit_selected: bool,
     ) {
-        let is_hovering = cursor_grid_x == char_grid_x && cursor_grid_y == char_grid_y;
-
-        if mouse_just_clicked {
-            if is_hovering {
-                self.is_selected = !self.is_selected;
-            } else {
-                self.is_selected = false;
-            }
-        }
-
-        self.cursor_type = if self.is_selected {
+        self.cursor_type = if is_unit_selected {
             CursorType::Click
-        } else if is_hovering {
+        } else if is_hovering_selectable_unit {
             CursorType::Hover
         } else {
             CursorType::Normal

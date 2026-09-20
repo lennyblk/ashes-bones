@@ -1,4 +1,3 @@
-use crate::cursor::Cursors;
 use crate::movement::MovementRange;
 use crate::unit::{Unit, UnitState};
 use raylib::consts::KeyboardKey::*;
@@ -9,16 +8,12 @@ use std::collections::HashMap;
 pub fn handle_movement_normal_click(
     rl: &RaylibHandle,
     unit: &mut Unit,
-    cursor: &mut Cursors,
     move_range: &Vec<(i32, i32)>,
     came_from: &HashMap<(i32, i32), (i32, i32)>,
     cursor_grid_x: i32,
     cursor_grid_y: i32,
 ) -> bool {
-    if rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-        && cursor.is_selected
-        && unit.state == UnitState::Idle
-    {
+    if rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) && unit.state == UnitState::Idle {
         if move_range.contains(&(cursor_grid_x, cursor_grid_y))
             && (cursor_grid_x, cursor_grid_y) != (unit.grid_x, unit.grid_y)
         {
@@ -35,7 +30,6 @@ pub fn handle_movement_normal_click(
             unit.state = UnitState::Walking;
             unit.attack_target = false;
             unit.path = waypoints;
-            cursor.is_selected = false;
             return true;
         }
     }
@@ -45,7 +39,6 @@ pub fn handle_movement_normal_click(
 pub fn handle_movement_attack_click(
     rl: &RaylibHandle,
     unit: &mut Unit,
-    cursor: &mut Cursors,
     came_from: &HashMap<(i32, i32), (i32, i32)>,
     valid_attack_positions: &Vec<(i32, i32)>,
     enemy_attackable: bool,
@@ -54,7 +47,6 @@ pub fn handle_movement_attack_click(
     cursor_grid_y: i32,
 ) -> bool {
     if rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-        && cursor.is_selected
         && unit.state == UnitState::Idle
         && enemy_attackable
         && cursor_grid_x == enemy.grid_x
@@ -63,7 +55,6 @@ pub fn handle_movement_attack_click(
         let current_distance =
             (enemy.grid_x - unit.grid_x).abs() + (enemy.grid_y - unit.grid_y).abs();
         if current_distance <= unit.attack_range {
-            cursor.is_selected = false;
             unit.state = UnitState::Attacking;
         } else if valid_attack_positions.len() == 1 {
             let waypoints = MovementRange::build_waypoints(
@@ -79,7 +70,6 @@ pub fn handle_movement_attack_click(
             unit.attack_target = true;
             unit.state = UnitState::Walking;
             unit.path = waypoints;
-            cursor.is_selected = false;
         } else {
             unit.state = UnitState::ChoosingPosition;
         }
@@ -91,7 +81,6 @@ pub fn handle_movement_attack_click(
 pub fn handle_movement_choosing_position_click(
     rl: &RaylibHandle,
     unit: &mut Unit,
-    cursor: &mut Cursors,
     came_from: &HashMap<(i32, i32), (i32, i32)>,
     valid_attack_positions: &Vec<(i32, i32)>,
     cursor_grid_x: i32,
@@ -114,7 +103,6 @@ pub fn handle_movement_choosing_position_click(
         unit.attack_target = true;
         unit.state = UnitState::Walking;
         unit.path = waypoints;
-        cursor.is_selected = false;
         return true;
     }
     false

@@ -141,3 +141,16 @@ impl Unit {
                 && (self.has_attacked || !self.can_attack_any(enemies)))
     }
 }
+
+// pour faire de emprunt mutable de deux éléments différents dans une meme donnée, aka ici mon
+// tableau de units
+pub fn two_mut(units: &mut [Unit], i: usize, j: usize) -> (&mut Unit, &mut Unit) {
+    assert!(i != j, "two_mut: i et j doivent être différents");
+    if i < j {
+        let (left, right) = units.split_at_mut(j);
+        (&mut left[i], &mut right[0])
+    } else {
+        let (left, right) = units.split_at_mut(i);
+        (&mut right[0], &mut left[j])
+    }
+}

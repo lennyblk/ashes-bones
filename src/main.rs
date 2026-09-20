@@ -17,7 +17,7 @@ mod unit;
 
 use cursor::{CursorType, Cursors};
 use movement::MovementRange;
-use unit::{Faction, Unit, UnitClass, UnitState};
+use unit::{Faction, Unit, UnitClass, UnitState, two_mut};
 
 const TILE_SIZE: i32 = 48;
 const GRID_COLS: i32 = 25;
@@ -57,8 +57,9 @@ fn main() {
             (cursor_grid_x * TILE_SIZE) as f32,
             (cursor_grid_y * TILE_SIZE) as f32,
         ),
-        is_selected: false,
     };
+    // mon index dans units (aucune -> None)
+    let mut selected_unit: Option<usize> = None;
 
     let hud = ui::HudRects::new();
 
@@ -222,7 +223,7 @@ fn main() {
                 combat_entering_timer = 0.0;
                 combat_ready_timer = 0.0;
                 combat_exit_pause_timer = 0.0;
-                cursor.is_selected = false;
+                selected_unit = None;
                 click_consumed = true;
             }
         }
@@ -230,13 +231,16 @@ fn main() {
             && game_mode == game_mode::GameMode::GridScreen
             && units[0].state == UnitState::Idle;
 
-        // bouton wait : le perso s'arrête là (utile avec plusieurs persos)
-        let wait_button_visible = player_can_act && units[0].can_wait();
+        // bouton wait
+        let wait_button_visible =
+            player_can_act && selected_unit.is_some_and(|i| units[i].can_wait());
         if wait_button_visible
             && input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_wait)
         {
-            units[0].wait();
-            cursor.is_selected = false;
+            if let Some(sel) = selected_unit {
+                units[sel].wait();
+            }
+            selected_unit = None;
             click_consumed = true;
         }
 
@@ -249,7 +253,7 @@ fn main() {
         if player_can_act && (end_turn_clicked || all_units_finished) {
             current_turn = game_mode::TurnPhase::EnemyTurn;
             enemy_turn_delay = ENEMY_TURN_DELAY;
-            cursor.is_selected = false;
+            selected_unit = None;
             click_consumed = true;
         }
 
@@ -442,12 +446,12 @@ fn main() {
             active_attacker = None;
         }
 
-        let (move_range, came_from) =
-            if cursor.is_selected && game_mode == game_mode::GameMode::GridScreen {
+        let (move_range, came_from) = if let Some(sel) = selected_unit {
+            if game_mode == game_mode::GameMode::GridScreen {
                 MovementRange::compute_movement_range(
-                    units[0].grid_x,
-                    units[0].grid_y,
-                    units[0].move_points_remaining,
+                    units[sel].grid_x,
+                    units[sel].grid_y,
+                    units[sel].move_points_remaining,
                     GRID_COLS,
                     GRID_ROWS,
                     units[1].grid_x,
@@ -457,82 +461,122 @@ fn main() {
                 )
             } else {
                 (Vec::new(), HashMap::new())
-            };
+            }
+        } else {
+            (Vec::new(), HashMap::new())
+        };
 
         input::cancel_pressed(&rl);
 
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
 
-        // if pour bouger le personnage
-        if input::handle_movement_normal_click(
-            &rl,
-            &mut units[0],
-            &mut cursor,
-            &move_range,
-            &came_from,
-            cursor_grid_x,
-            cursor_grid_y,
-        ) {
-            click_consumed = true;
+        let clicked = mouse_is_clicked(&rl);
+
+        // sélection / désélection d'une unité Human au clic sur sa case
+        // pas d'undead encore
+        if game_mode == game_mode::GameMode::GridScreen && clicked && !click_consumed {
+            match selected_unit {
+                None => {
+                    selected_unit = units.iter().position(|u| {
+                        u.faction == Faction::Human
+                            && u.is_alive()
+                            && u.state == UnitState::Idle
+                            && u.grid_x == cursor_grid_x
+                            && u.grid_y == cursor_grid_y
+                    });
+                }
+                Some(sel)
+                    if units[sel].grid_x == cursor_grid_x && units[sel].grid_y == cursor_grid_y =>
+                {
+                    selected_unit = None;
+                }
+                _ => {}
+            }
         }
 
-        // une seule attaque par tour et par unité
-        let valid_attack_positions = if units[0].has_attacked {
-            Vec::new()
-        } else {
-            MovementRange::compute_attackable_positions(
-                &move_range,
-                units[1].grid_x,
-                units[1].grid_y,
-                units[0].attack_range,
-                &units[1],
-            )
-        };
-        let wraith_attackable = !valid_attack_positions.is_empty();
-
-        // if pour attaquer l'ennemi et bouger le personnage si il y a qu'une seule case possible
-        // pour attaquer
-        {
-            let (left, right) = units.split_at_mut(1);
-            if input::handle_movement_attack_click(
+        // if pour bouger le personnage sélectionné
+        if let Some(sel) = selected_unit {
+            if input::handle_movement_normal_click(
                 &rl,
-                &mut left[0],
-                &mut cursor,
+                &mut units[sel],
+                &move_range,
                 &came_from,
-                &valid_attack_positions,
-                wraith_attackable,
-                &right[0],
                 cursor_grid_x,
                 cursor_grid_y,
             ) {
-                click_consumed = true;
+                selected_unit = None;
+            }
+        }
+
+        // une seule attaque par tour et par unité
+        let valid_attack_positions = match selected_unit {
+            Some(sel) if !units[sel].has_attacked => MovementRange::compute_attackable_positions(
+                &move_range,
+                units[1].grid_x,
+                units[1].grid_y,
+                units[sel].attack_range,
+                &units[1],
+            ),
+            _ => Vec::new(),
+        };
+        let wraith_attackable = !valid_attack_positions.is_empty();
+
+        // if pour attaquer l'ennemi et bouger le personnage sélectionné si il y a qu'une
+        // seule case possible pour attaquer
+        if let Some(sel) = selected_unit {
+            let (mover, enemy) = two_mut(&mut units, sel, 1);
+            if input::handle_movement_attack_click(
+                &rl,
+                mover,
+                &came_from,
+                &valid_attack_positions,
+                wraith_attackable,
+                enemy,
+                cursor_grid_x,
+                cursor_grid_y,
+            ) {
+                if mover.state != UnitState::ChoosingPosition {
+                    selected_unit = None;
+                }
             }
         }
 
         // if pour bouger le personnage vers la case choisie pour attaquer l'ennemi
-        if input::handle_movement_choosing_position_click(
-            &rl,
-            &mut units[0],
-            &mut cursor,
-            &came_from,
-            &valid_attack_positions,
-            cursor_grid_x,
-            cursor_grid_y,
-        ) {
-            click_consumed = true;
+        if let Some(sel) = selected_unit {
+            if input::handle_movement_choosing_position_click(
+                &rl,
+                &mut units[sel],
+                &came_from,
+                &valid_attack_positions,
+                cursor_grid_x,
+                cursor_grid_y,
+            ) {
+                selected_unit = None;
+            }
         }
 
-        if input::cancel_pressed(&rl) && units[0].state == UnitState::ChoosingPosition {
-            units[0].state = UnitState::Idle;
+        if let Some(sel) = selected_unit {
+            if input::cancel_pressed(&rl) && units[sel].state == UnitState::ChoosingPosition {
+                units[sel].state = UnitState::Idle;
+                selected_unit = None;
+            }
         }
+
+        let hovering_selectable_unit = selected_unit.is_none()
+            && units.iter().any(|u| {
+                u.faction == Faction::Human
+                    && u.is_alive()
+                    && u.state == UnitState::Idle
+                    && u.grid_x == cursor_grid_x
+                    && u.grid_y == cursor_grid_y
+            });
 
         cursor.update_cursor(
             cursor_grid_x,
             cursor_grid_y,
-            units[0].grid_x,
-            units[0].grid_y,
-            mouse_is_clicked(&rl) && !click_consumed,
+            hovering_selectable_unit,
+            selected_unit.is_some(),
         );
 
         // drawing --------------------------------------------------------------
