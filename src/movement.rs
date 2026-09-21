@@ -6,16 +6,14 @@ pub struct MovementRange {
 }
 
 impl MovementRange {
+    /// `blocked_tiles` = carte + unités, construit par l'appelant.
     pub fn compute_movement_range(
         start_x: i32,
         start_y: i32,
         move_points: i32,
         grid_cols: i32,
         grid_rows: i32,
-        enemy_x: i32,
-        enemy_y: i32,
-        enemy: &Unit,
-        blocked_tiles: &Vec<(i32, i32)>,
+        blocked_tiles: &[(i32, i32)],
     ) -> (Vec<(i32, i32)>, HashMap<(i32, i32), (i32, i32)>) {
         let mut visited: Vec<(i32, i32)> = vec![(start_x, start_y)];
         let mut queue: Vec<(i32, i32, i32)> = vec![(start_x, start_y, 0)]; // x, y, coût actuel
@@ -35,12 +33,9 @@ impl MovementRange {
             for (nx, ny) in neighbors {
                 let in_bounds = nx >= 0 && nx < grid_cols && ny >= 0 && ny < grid_rows;
                 let already_visited = visited.contains(&(nx, ny));
-                let is_enemy = nx == enemy_x && ny == enemy_y;
                 let is_blocked_tile = blocked_tiles.contains(&(nx, ny));
 
-                let is_blocked_by_enemy = is_enemy && enemy.is_alive();
-
-                if in_bounds && !already_visited && !is_blocked_by_enemy && !is_blocked_tile {
+                if in_bounds && !already_visited && !is_blocked_tile {
                     visited.push((nx, ny));
                     queue.push((nx, ny, cost + 1));
                     came_from.insert((nx, ny), (x, y));

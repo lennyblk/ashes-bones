@@ -2,17 +2,27 @@ use crate::movement::MovementRange;
 use crate::unit::{Unit, UnitState};
 use crate::{GRID_COLS, GRID_ROWS};
 
-pub fn ai_move_toward_target(unit: &mut Unit, target: &Unit, blocked_tiles: &Vec<(i32, i32)>) {
+/// `obstacles` bloquent le passage, `target` sert juste de destination.
+pub fn ai_move_toward_target(
+    unit: &mut Unit,
+    target: &Unit,
+    obstacles: &[Unit],
+    blocked_tiles: &Vec<(i32, i32)>,
+) {
+    let mut occupied = blocked_tiles.clone();
+    for other in obstacles {
+        if other.is_alive() {
+            occupied.push((other.grid_x, other.grid_y));
+        }
+    }
+
     let (reachable, came_from) = MovementRange::compute_movement_range(
         unit.grid_x,
         unit.grid_y,
         unit.move_points,
         GRID_COLS,
         GRID_ROWS,
-        target.grid_x,
-        target.grid_y,
-        target,
-        blocked_tiles,
+        &occupied,
     );
 
     // min_by_key renvoie Option<&(i32,i32)> : Some(case) si reachable n'est pas vide, None sinon
@@ -63,7 +73,7 @@ pub fn take_turn(unit: &mut Unit, targets: &[Unit], blocked_tiles: &Vec<(i32, i3
     if let Some(target) = find_closest_target(unit, targets) {
         ai_attack_if_in_range(unit, target);
         if unit.state != UnitState::Attacking {
-            ai_move_toward_target(unit, target, blocked_tiles);
+            ai_move_toward_target(unit, target, targets, blocked_tiles);
         }
     }
 }

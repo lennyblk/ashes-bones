@@ -261,8 +261,12 @@ fn main() {
             enemy_turn_delay -= delta_time;
             if enemy_turn_delay <= 0.0 {
                 enemy_turn_delay = 0.0;
-                let (left, right) = units.split_at_mut(1);
-                ai::take_turn(&mut right[0], &[left[0].clone()], &blocked_tiles);
+                let human_units: Vec<Unit> = units
+                    .iter()
+                    .filter(|u| u.faction == Faction::Human && u.is_alive())
+                    .cloned()
+                    .collect();
+                ai::take_turn(&mut units[1], &human_units, &blocked_tiles);
             }
         }
 
@@ -439,7 +443,9 @@ fn main() {
             && units[1].state == UnitState::Idle
         {
             current_turn = game_mode::TurnPhase::PlayerTurn;
-            units[0].start_turn();
+            for u in units.iter_mut().filter(|u| u.faction == Faction::Human) {
+                u.start_turn();
+            }
         }
 
         if active_attacker.is_some() && game_mode == game_mode::GameMode::GridScreen {
@@ -448,16 +454,20 @@ fn main() {
 
         let (move_range, came_from) = if let Some(sel) = selected_unit {
             if game_mode == game_mode::GameMode::GridScreen {
+                // toute autre unité vivante (alliée ou ennemie) bloque le passage
+                let mut occupied = blocked_tiles.clone();
+                for (i, u) in units.iter().enumerate() {
+                    if i != sel && u.is_alive() {
+                        occupied.push((u.grid_x, u.grid_y));
+                    }
+                }
                 MovementRange::compute_movement_range(
                     units[sel].grid_x,
                     units[sel].grid_y,
                     units[sel].move_points_remaining,
                     GRID_COLS,
                     GRID_ROWS,
-                    units[1].grid_x,
-                    units[1].grid_y,
-                    &units[1],
-                    &blocked_tiles,
+                    &occupied,
                 )
             } else {
                 (Vec::new(), HashMap::new())
