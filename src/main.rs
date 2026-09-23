@@ -15,6 +15,7 @@ mod render;
 mod ui;
 mod unit;
 
+use animation::Animation;
 use cursor::{CursorType, Cursors};
 use movement::MovementRange;
 use unit::{Faction, Unit, UnitClass, UnitState, two_mut};
@@ -136,8 +137,8 @@ fn main() {
     let units_initial = units.clone();
 
     let mut game_mode = game_mode::GameMode::TitleScreen;
-    let mut soldier_combat_x: f32 = 0.0;
-    let mut wraith_combat_x: f32 = 0.0;
+    let mut attacker_combat_x: f32 = 0.0;
+    let mut defender_combat_x: f32 = 0.0;
     let mut combat_entering_timer: f32 = 0.0;
     let mut combat_ready_timer: f32 = 0.0;
     let mut combat_exit_pause_timer: f32 = 0.0;
@@ -145,7 +146,8 @@ fn main() {
     let blocked_tiles = tile_map.blocked_tiles.clone();
 
     let mut attack_animation_started = false;
-    let mut active_attacker: Option<Faction> = None;
+    // (indice attaquant, indice défenseur) dans `units`
+    let mut active_combat: Option<(usize, usize)> = None;
 
     let mut current_turn = game_mode::TurnPhase::PlayerTurn;
     let mut enemy_turn_delay: f32 = 0.0;
@@ -218,7 +220,7 @@ fn main() {
                 game_mode = game_mode::GameMode::GridScreen;
                 current_turn = game_mode::TurnPhase::PlayerTurn;
                 enemy_turn_delay = 0.0;
-                active_attacker = None;
+                active_combat = None;
                 attack_animation_started = false;
                 combat_entering_timer = 0.0;
                 combat_ready_timer = 0.0;
@@ -271,11 +273,15 @@ fn main() {
         }
 
         // combat -----------------------------------------------------------
-        if game_mode == game_mode::GameMode::GridScreen && active_attacker.is_none() {
-            if units[0].state == UnitState::Attacking {
-                active_attacker = Some(Faction::Human);
-            } else if units[1].state == UnitState::Attacking {
-                active_attacker = Some(Faction::Undead);
+        if game_mode == game_mode::GameMode::GridScreen && active_combat.is_none() {
+            if let Some(attacker_idx) = units.iter().position(|u| u.state == UnitState::Attacking) {
+                let attacker_faction = units[attacker_idx].faction;
+                if let Some(defender_idx) = units
+                    .iter()
+                    .position(|u| u.faction != attacker_faction && u.is_alive())
+                {
+                    active_combat = Some((attacker_idx, defender_idx));
+                }
             }
         }
 
@@ -285,12 +291,6 @@ fn main() {
         let left_x = center_x - sprite_size + overlap;
         let right_x = center_x - overlap;
 
-        let (soldier_target_x, wraith_target_x) = if units[0].facing_left {
-            (right_x, left_x)
-        } else {
-            (left_x, right_x)
-        };
-
         // faire disparaître le message de résultat du minigame après un certain temps
         if let Some((_, time_left, _)) = &mut result_display {
             *time_left -= delta_time;
@@ -298,135 +298,99 @@ fn main() {
                 result_display = None;
             }
         }
-        {
-            let (left, right) = units.split_at_mut(1);
-            match active_attacker {
-                Some(Faction::Human) => {
-                    combat::start_attack_if_needed(
-                        &mut left[0],
-                        &mut right[0],
-                        &mut assets.soldier.attack,
-                        &mut assets.soldier.attack_effect,
-                        &mut attack_animation_started,
-                        &mut game_mode,
-                        &mut soldier_combat_x,
-                        &mut wraith_combat_x,
-                    );
-                    combat::enter_combat(
-                        &mut left[0],
-                        &mut right[0],
-                        &mut soldier_combat_x,
-                        &mut wraith_combat_x,
-                        soldier_target_x,
-                        wraith_target_x,
-                        &mut combat_entering_timer,
-                        delta_time,
-                    );
-                    combat::start_attack_after_ready(
-                        &mut left[0],
-                        &right[0],
-                        attack_animation_started,
-                        &mut combat_ready_timer,
-                        delta_time,
-                    );
-                    if let Some(result) = minigame::handle_minigame(
-                        &mut left[0],
-                        &mut right[0],
-                        player_faction,
-                        &mut timing_bar,
-                        &mut damage_multiplier,
-                        &rl,
-                        delta_time,
-                        &mut assets.soldier.attack,
-                    ) {
-                        result_display = Some((result, 1.0, damage_multiplier));
-                    }
-                    combat::resolve_attack(
-                        &mut left[0],
-                        &mut right[0],
-                        &assets.soldier.attack,
-                        &mut assets.wraith.hurt,
-                        &mut attack_animation_started,
-                        damage_multiplier,
-                    );
-                    combat::update_hurt_state(
-                        &mut right[0],
-                        &assets.wraith.hurt,
-                        &mut assets.wraith.die,
-                    );
-                    combat::update_dying_state(&mut right[0], &assets.wraith.die);
-                    combat::combat_exit_pause_timer(
-                        &mut right[0],
-                        attack_animation_started,
-                        &mut game_mode,
-                        &mut combat_exit_pause_timer,
-                        delta_time,
-                    );
-                }
-                Some(Faction::Undead) => {
-                    combat::start_attack_if_needed(
-                        &mut right[0],
-                        &mut left[0],
-                        &mut assets.wraith.attack,
-                        &mut assets.wraith.attack_effect,
-                        &mut attack_animation_started,
-                        &mut game_mode,
-                        &mut wraith_combat_x,
-                        &mut soldier_combat_x,
-                    );
-                    combat::enter_combat(
-                        &mut right[0],
-                        &mut left[0],
-                        &mut wraith_combat_x,
-                        &mut soldier_combat_x,
-                        wraith_target_x,
-                        soldier_target_x,
-                        &mut combat_entering_timer,
-                        delta_time,
-                    );
-                    combat::start_attack_after_ready(
-                        &mut right[0],
-                        &left[0],
-                        attack_animation_started,
-                        &mut combat_ready_timer,
-                        delta_time,
-                    );
-                    if let Some(result) = minigame::handle_minigame(
-                        &mut right[0],
-                        &mut left[0],
-                        player_faction,
-                        &mut timing_bar,
-                        &mut damage_multiplier,
-                        &rl,
-                        delta_time,
-                        &mut assets.wraith.attack,
-                    ) {
-                        result_display = Some((result, 1.0, damage_multiplier));
-                    }
-                    combat::resolve_attack(
-                        &mut right[0],
-                        &mut left[0],
-                        &assets.wraith.attack,
-                        &mut assets.soldier.hurt,
-                        &mut attack_animation_started,
-                        damage_multiplier,
-                    );
-                    combat::update_hurt_state(
-                        &mut left[0],
-                        &assets.soldier.hurt,
-                        &mut assets.soldier.die,
-                    );
-                    combat::update_dying_state(&mut left[0], &assets.soldier.die);
-                    combat::combat_exit_pause_timer(
-                        &mut left[0],
-                        attack_animation_started,
-                        &mut game_mode,
-                        &mut combat_exit_pause_timer,
-                        delta_time,
-                    );
-                }
-                None => {}
+
+        if let Some((attacker_idx, defender_idx)) = active_combat {
+            let (attacker_target_x, defender_target_x) = if units[attacker_idx].facing_left {
+                (right_x, left_x)
+            } else {
+                (left_x, right_x)
+            };
+
+            let attacker_class = units[attacker_idx].class;
+            let defender_class = units[defender_idx].class;
+            let (attacker, defender) = two_mut(&mut units, attacker_idx, defender_idx);
+
+            {
+                let attacker_set = assets.animation_set_mut(attacker_class);
+                combat::start_attack_if_needed(
+                    attacker,
+                    defender,
+                    &mut attacker_set.attack,
+                    &mut attacker_set.attack_effect,
+                    &mut attack_animation_started,
+                    &mut game_mode,
+                    &mut attacker_combat_x,
+                    &mut defender_combat_x,
+                );
             }
+            combat::enter_combat(
+                attacker,
+                defender,
+                &mut attacker_combat_x,
+                &mut defender_combat_x,
+                attacker_target_x,
+                defender_target_x,
+                &mut combat_entering_timer,
+                delta_time,
+            );
+            combat::start_attack_after_ready(
+                attacker,
+                defender,
+                attack_animation_started,
+                &mut combat_ready_timer,
+                delta_time,
+            );
+            {
+                let attacker_set = assets.animation_set_mut(attacker_class);
+                if let Some(result) = minigame::handle_minigame(
+                    attacker,
+                    defender,
+                    player_faction,
+                    &mut timing_bar,
+                    &mut damage_multiplier,
+                    &rl,
+                    delta_time,
+                    &mut attacker_set.attack,
+                ) {
+                    result_display = Some((result, 1.0, damage_multiplier));
+                }
+            }
+            let (attacker_attack, defender_hurt): (&Animation, &mut Animation) =
+                match (attacker_class, defender_class) {
+                    (UnitClass::Soldier, UnitClass::Wraith) => {
+                        (&assets.soldier.attack, &mut assets.wraith.hurt)
+                    }
+                    (UnitClass::Cavalry, UnitClass::Wraith) => {
+                        (&assets.cavalry.attack, &mut assets.wraith.hurt)
+                    }
+                    (UnitClass::Wraith, UnitClass::Soldier) => {
+                        (&assets.wraith.attack, &mut assets.soldier.hurt)
+                    }
+                    (UnitClass::Wraith, UnitClass::Cavalry) => {
+                        (&assets.wraith.attack, &mut assets.cavalry.hurt)
+                    }
+                    _ => unreachable!("attaquant et défenseur ne sont jamais de la même classe"),
+                };
+            combat::resolve_attack(
+                attacker,
+                defender,
+                attacker_attack,
+                defender_hurt,
+                &mut attack_animation_started,
+                damage_multiplier,
+            );
+            {
+                let defender_set = assets.animation_set_mut(defender_class);
+                combat::update_hurt_state(defender, &defender_set.hurt, &mut defender_set.die);
+                combat::update_dying_state(defender, &defender_set.die);
+            }
+            combat::combat_exit_pause_timer(
+                defender,
+                attack_animation_started,
+                &mut game_mode,
+                &mut combat_exit_pause_timer,
+                delta_time,
+            );
         }
 
         if game_mode == game_mode::GameMode::GridScreen {
@@ -448,8 +412,8 @@ fn main() {
             }
         }
 
-        if active_attacker.is_some() && game_mode == game_mode::GameMode::GridScreen {
-            active_attacker = None;
+        if active_combat.is_some() && game_mode == game_mode::GameMode::GridScreen {
+            active_combat = None;
         }
 
         let (move_range, came_from) = if let Some(sel) = selected_unit {
@@ -603,18 +567,20 @@ fn main() {
                 mouse_position,
             );
         } else if game_mode == game_mode::GameMode::CombatScreen {
-            render::draw_combat_screen(
-                &mut d,
-                &thread,
-                &mut assets,
-                delta_time,
-                &units[0],
-                &units[1],
-                soldier_combat_x,
-                wraith_combat_x,
-                timing_bar.as_ref(),
-                result_display.as_ref(),
-            );
+            if let Some((attacker_idx, defender_idx)) = active_combat {
+                render::draw_combat_screen(
+                    &mut d,
+                    &thread,
+                    &mut assets,
+                    delta_time,
+                    &units[attacker_idx],
+                    &units[defender_idx],
+                    attacker_combat_x,
+                    defender_combat_x,
+                    timing_bar.as_ref(),
+                    result_display.as_ref(),
+                );
+            }
         } else {
             render::draw_grid_screen(
                 &mut d,

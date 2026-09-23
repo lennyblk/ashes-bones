@@ -1,6 +1,6 @@
 use crate::animation::Animation;
 use crate::cursor::CursorType;
-use crate::unit::UnitState;
+use crate::unit::{UnitClass, UnitState};
 use raylib::prelude::*;
 
 pub struct AnimationSet {
@@ -80,6 +80,14 @@ impl Assets {
             CursorType::Normal => &self.mouse_normal_texture,
             CursorType::Hover => &self.mouse_hover_texture,
             CursorType::Click => &self.mouse_click_texture,
+        }
+    }
+
+    pub fn animation_set_mut(&mut self, class: UnitClass) -> &mut AnimationSet {
+        match class {
+            UnitClass::Soldier => &mut self.soldier,
+            UnitClass::Cavalry => &mut self.cavalry,
+            UnitClass::Wraith => &mut self.wraith,
         }
     }
 }

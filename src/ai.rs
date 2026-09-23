@@ -2,7 +2,6 @@ use crate::movement::MovementRange;
 use crate::unit::{Unit, UnitState};
 use crate::{GRID_COLS, GRID_ROWS};
 
-/// `obstacles` bloquent le passage, `target` sert juste de destination.
 pub fn ai_move_toward_target(
     unit: &mut Unit,
     target: &Unit,

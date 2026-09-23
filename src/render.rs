@@ -549,10 +549,10 @@ pub fn draw_combat_screen(
     thread: &RaylibThread,
     assets: &mut Assets,
     delta_time: f32,
-    soldier: &Unit,
-    wraith: &Unit,
-    soldier_combat_x: f32,
-    wraith_combat_x: f32,
+    attacker: &Unit,
+    defender: &Unit,
+    attacker_combat_x: f32,
+    defender_combat_x: f32,
     timing_bar: Option<&TimingBar>,
     result_display: Option<&(TimingResult, f32, f32)>,
 ) {
@@ -563,56 +563,56 @@ pub fn draw_combat_screen(
     draw_fullscreen_texture(d, &assets.combat_screen_background_texture);
 
     // HUD combat ---------------------------------------------------------------
-    draw_unit_hud(d, assets, soldier);
-    draw_unit_hud(d, assets, wraith);
+    draw_unit_hud(d, assets, attacker);
+    draw_unit_hud(d, assets, defender);
 
     // sprites ------------------------------------------------------------------
     let sprite_size = 500.0;
     let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
 
-    if soldier.is_alive() {
-        let animation = assets.soldier.for_state_mut(soldier.state);
+    if attacker.is_alive() {
+        let animation = assets.animation_set_mut(attacker.class).for_state_mut(attacker.state);
         draw_unit_sprite(
             d,
             animation,
-            soldier,
-            soldier_combat_x,
+            attacker,
+            attacker_combat_x,
             combat_y,
             sprite_size,
             delta_time,
         );
     }
-    if soldier.state == UnitState::Attacking {
-        let effect = &mut assets.soldier.attack_effect;
+    if attacker.state == UnitState::Attacking {
+        let effect = &mut assets.animation_set_mut(attacker.class).attack_effect;
         draw_unit_sprite(
             d,
             effect,
-            soldier,
-            soldier_combat_x,
+            attacker,
+            attacker_combat_x,
             combat_y,
             sprite_size,
             delta_time,
         );
     }
-    if wraith.state == UnitState::Attacking {
-        let effect = &mut assets.wraith.attack_effect;
+    if defender.state == UnitState::Attacking {
+        let effect = &mut assets.animation_set_mut(defender.class).attack_effect;
         draw_unit_sprite(
             d,
             effect,
-            wraith,
-            wraith_combat_x,
+            defender,
+            defender_combat_x,
             combat_y,
             sprite_size,
             delta_time,
         );
     }
-    if wraith.is_alive() {
-        let animation = assets.wraith.for_state_mut(wraith.state);
+    if defender.is_alive() {
+        let animation = assets.animation_set_mut(defender.class).for_state_mut(defender.state);
         draw_unit_sprite(
             d,
             animation,
-            wraith,
-            wraith_combat_x,
+            defender,
+            defender_combat_x,
             combat_y,
             sprite_size,
             delta_time,

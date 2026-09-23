@@ -6,7 +6,6 @@ pub struct MovementRange {
 }
 
 impl MovementRange {
-    /// `blocked_tiles` = carte + unités, construit par l'appelant.
     pub fn compute_movement_range(
         start_x: i32,
         start_y: i32,
