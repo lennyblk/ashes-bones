@@ -213,7 +213,17 @@ fn main() {
                 break;
             }
             if input::is_button_clicked(mouse_position, clicked, hud.btn_back) {
-                // TODO: retour au menu de titre
+                units = units_initial.clone();
+                game_mode = game_mode::GameMode::TitleScreen;
+                current_turn = game_mode::TurnPhase::PlayerTurn;
+                enemy_turn_delay = 0.0;
+                active_combat = None;
+                attack_animation_started = false;
+                combat_entering_timer = 0.0;
+                combat_ready_timer = 0.0;
+                combat_exit_pause_timer = 0.0;
+                selected_unit = None;
+                click_consumed = true;
             }
             if input::is_button_clicked(mouse_position, clicked, hud.btn_retry) {
                 units = units_initial.clone();
