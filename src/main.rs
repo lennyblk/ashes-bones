@@ -192,16 +192,17 @@ fn main() {
         }
 
         // Faction selection screen : Human / Undead --------------------------------
-        if game_mode == game_mode::GameMode::FactionSelectionScreen
-            && !click_consumed
-            && mouse_is_clicked(&rl)
-        {
-            player_faction = if mouse_position.x < SCREEN_WIDTH as f32 / 2.0 {
-                Faction::Human
-            } else {
-                Faction::Undead
-            };
-            game_mode = game_mode::GameMode::GridScreen;
+        if game_mode == game_mode::GameMode::FactionSelectionScreen {
+            if input::cancel_pressed(&rl) {
+                game_mode = game_mode::GameMode::TitleScreen;
+            } else if !click_consumed && mouse_is_clicked(&rl) {
+                player_faction = if mouse_position.x < SCREEN_WIDTH as f32 / 2.0 {
+                    Faction::Human
+                } else {
+                    Faction::Undead
+                };
+                game_mode = game_mode::GameMode::GridScreen;
+            }
         }
 
         // écran de fin : retry / back / exit --------------------------------
