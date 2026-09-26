@@ -6,6 +6,15 @@ pub enum Faction {
     Undead,
 }
 
+impl Faction {
+    pub fn opposite(self) -> Faction {
+        match self {
+            Faction::Human => Faction::Undead,
+            Faction::Undead => Faction::Human,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum UnitClass {
     Soldier,
@@ -106,6 +115,18 @@ impl Unit {
 
     pub fn is_alive(&self) -> bool {
         self.state != UnitState::Dead
+    }
+
+    pub fn is_busy(&self) -> bool {
+        matches!(
+            self.state,
+            UnitState::Walking
+                | UnitState::CombatEntering
+                | UnitState::Attacking
+                | UnitState::MiniGame
+                | UnitState::Hurt
+                | UnitState::Dying
+        )
     }
 
     // tour par tour ---------------------------------------------------------

@@ -99,12 +99,12 @@ pub fn start_attack_after_ready(
 pub fn resolve_attack(
     attacker: &mut Unit,
     defender: &mut Unit,
-    attacker_attack_animation: &Animation,
+    attacker_attack_finished: bool,
     defender_hurt_animation: &mut Animation,
     attack_animation_started: &mut bool,
     damage_multiplier: f32,
 ) {
-    if attacker.state == UnitState::Attacking && attacker_attack_animation.finished {
+    if attacker.state == UnitState::Attacking && attacker_attack_finished {
         defender.hp_points -= (attack_damage_dealt(attacker.attack_power, defender.defense) as f32
             * damage_multiplier) as i32;
         if defender.hp_points < 0 {

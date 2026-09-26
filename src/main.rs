@@ -15,7 +15,6 @@ mod render;
 mod ui;
 mod unit;
 
-use animation::Animation;
 use cursor::{CursorType, Cursors};
 use movement::MovementRange;
 use unit::{Faction, Unit, UnitClass, UnitState, two_mut};
@@ -130,7 +129,6 @@ fn main() {
         attack_target: false,
     };
 
-    // units[0] = soldier, units[1] = wraith, units[2] = cavalry
     let mut units: Vec<Unit> = vec![soldier, wraith, cavalry];
 
     // état de départ, pour le bouton retry
@@ -165,14 +163,10 @@ fn main() {
         fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
             rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
         }
-        units[0].update_position(delta_time);
-        units[0].advance_path();
-
-        units[1].update_position(delta_time);
-        units[1].advance_path();
-
-        units[2].update_position(delta_time);
-        units[2].advance_path();
+        for unit in units.iter_mut() {
+            unit.update_position(delta_time);
+            unit.advance_path();
+        }
 
         let mut click_consumed = false;
 
@@ -240,9 +234,12 @@ fn main() {
                 click_consumed = true;
             }
         }
+        let player_units_busy = units
+            .iter()
+            .any(|u| u.faction == player_faction && u.is_busy());
         let player_can_act = current_turn == game_mode::TurnPhase::PlayerTurn
             && game_mode == game_mode::GameMode::GridScreen
-            && units[0].state == UnitState::Idle;
+            && !player_units_busy;
 
         // bouton wait
         let wait_button_visible =
@@ -261,7 +258,15 @@ fn main() {
         let end_turn_clicked =
             input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_end_turn);
 
-        let all_units_finished = units[0].has_finished_turn(&[units[1].clone()]);
+        let enemy_snapshot: Vec<Unit> = units
+            .iter()
+            .filter(|u| u.faction == player_faction.opposite())
+            .cloned()
+            .collect();
+        let all_units_finished = units
+            .iter()
+            .filter(|u| u.faction == player_faction && u.is_alive())
+            .all(|u| u.has_finished_turn(&enemy_snapshot));
 
         if player_can_act && (end_turn_clicked || all_units_finished) {
             current_turn = game_mode::TurnPhase::EnemyTurn;
@@ -274,12 +279,20 @@ fn main() {
             enemy_turn_delay -= delta_time;
             if enemy_turn_delay <= 0.0 {
                 enemy_turn_delay = 0.0;
-                let human_units: Vec<Unit> = units
+                let player_units: Vec<Unit> = units
                     .iter()
-                    .filter(|u| u.faction == Faction::Human && u.is_alive())
+                    .filter(|u| u.faction == player_faction && u.is_alive())
                     .cloned()
                     .collect();
-                ai::take_turn(&mut units[1], &human_units, &blocked_tiles);
+                let ai_indices: Vec<usize> = units
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, u)| u.faction == player_faction.opposite() && u.is_alive())
+                    .map(|(i, _)| i)
+                    .collect();
+                for idx in ai_indices {
+                    ai::take_turn(&mut units[idx], &player_units, &blocked_tiles);
+                }
             }
         }
 
@@ -366,26 +379,12 @@ fn main() {
                     result_display = Some((result, 1.0, damage_multiplier));
                 }
             }
-            let (attacker_attack, defender_hurt): (&Animation, &mut Animation) =
-                match (attacker_class, defender_class) {
-                    (UnitClass::Soldier, UnitClass::Wraith) => {
-                        (&assets.soldier.attack, &mut assets.wraith.hurt)
-                    }
-                    (UnitClass::Cavalry, UnitClass::Wraith) => {
-                        (&assets.cavalry.attack, &mut assets.wraith.hurt)
-                    }
-                    (UnitClass::Wraith, UnitClass::Soldier) => {
-                        (&assets.wraith.attack, &mut assets.soldier.hurt)
-                    }
-                    (UnitClass::Wraith, UnitClass::Cavalry) => {
-                        (&assets.wraith.attack, &mut assets.cavalry.hurt)
-                    }
-                    _ => unreachable!("attaquant et défenseur ne sont jamais de la même classe"),
-                };
+            let attacker_attack_finished = assets.animation_set_mut(attacker_class).attack.finished;
+            let defender_hurt = &mut assets.animation_set_mut(defender_class).hurt;
             combat::resolve_attack(
                 attacker,
                 defender,
-                attacker_attack,
+                attacker_attack_finished,
                 defender_hurt,
                 &mut attack_animation_started,
                 damage_multiplier,
@@ -405,20 +404,30 @@ fn main() {
         }
 
         if game_mode == game_mode::GameMode::GridScreen {
-            if units[0].state == UnitState::Dead {
+            let player_alive = units
+                .iter()
+                .any(|u| u.faction == player_faction && u.is_alive());
+            let enemy_alive = units
+                .iter()
+                .any(|u| u.faction != player_faction && u.is_alive());
+            if !player_alive {
                 game_mode = game_mode::GameMode::Defeat;
-            } else if units[1].state == UnitState::Dead {
+            } else if !enemy_alive {
                 game_mode = game_mode::GameMode::Victory;
             }
         }
 
+        let enemy_settled = units
+            .iter()
+            .filter(|u| u.faction == player_faction.opposite() && u.is_alive())
+            .all(|u| !u.is_busy());
         if current_turn == game_mode::TurnPhase::EnemyTurn
             && enemy_turn_delay <= 0.0
             && game_mode == game_mode::GameMode::GridScreen
-            && units[1].state == UnitState::Idle
+            && enemy_settled
         {
             current_turn = game_mode::TurnPhase::PlayerTurn;
-            for u in units.iter_mut().filter(|u| u.faction == Faction::Human) {
+            for u in units.iter_mut().filter(|u| u.faction == player_faction) {
                 u.start_turn();
             }
         }
@@ -458,13 +467,12 @@ fn main() {
 
         let clicked = mouse_is_clicked(&rl);
 
-        // sélection / désélection d'une unité Human au clic sur sa case
-        // pas d'undead encore
+        // sélection / désélection d'une unité du joueur au clic sur sa case
         if game_mode == game_mode::GameMode::GridScreen && clicked && !click_consumed {
             match selected_unit {
                 None => {
                     selected_unit = units.iter().position(|u| {
-                        u.faction == Faction::Human
+                        u.faction == player_faction
                             && u.is_alive()
                             && u.state == UnitState::Idle
                             && u.grid_x == cursor_grid_x
@@ -494,35 +502,64 @@ fn main() {
             }
         }
 
-        // une seule attaque par tour et par unité
-        let valid_attack_positions = match selected_unit {
-            Some(sel) if !units[sel].has_attacked => MovementRange::compute_attackable_positions(
-                &move_range,
-                units[1].grid_x,
-                units[1].grid_y,
-                units[sel].attack_range,
-                &units[1],
-            ),
-            _ => Vec::new(),
+        let (valid_attack_positions, attackable_enemy_positions): (
+            Vec<(i32, i32)>,
+            Vec<(i32, i32)>,
+        ) = match selected_unit {
+            Some(sel) if !units[sel].has_attacked => {
+                let attacker_faction = units[sel].faction;
+                let attacker_range = units[sel].attack_range;
+                let mut positions = Vec::new();
+                let mut enemy_tiles = Vec::new();
+                for enemy in units
+                    .iter()
+                    .filter(|u| u.faction != attacker_faction && u.is_alive())
+                {
+                    let reachable = MovementRange::compute_attackable_positions(
+                        &move_range,
+                        enemy.grid_x,
+                        enemy.grid_y,
+                        attacker_range,
+                        enemy,
+                    );
+                    if !reachable.is_empty() {
+                        enemy_tiles.push((enemy.grid_x, enemy.grid_y));
+                        for pos in reachable {
+                            if !positions.contains(&pos) {
+                                positions.push(pos);
+                            }
+                        }
+                    }
+                }
+                (positions, enemy_tiles)
+            }
+            _ => (Vec::new(), Vec::new()),
         };
-        let wraith_attackable = !valid_attack_positions.is_empty();
 
         // if pour attaquer l'ennemi et bouger le personnage sélectionné si il y a qu'une
         // seule case possible pour attaquer
         if let Some(sel) = selected_unit {
-            let (mover, enemy) = two_mut(&mut units, sel, 1);
-            if input::handle_movement_attack_click(
-                &rl,
-                mover,
-                &came_from,
-                &valid_attack_positions,
-                wraith_attackable,
-                enemy,
-                cursor_grid_x,
-                cursor_grid_y,
-            ) {
-                if mover.state != UnitState::ChoosingPosition {
-                    selected_unit = None;
+            let attacker_faction = units[sel].faction;
+            if let Some(enemy_idx) = units.iter().position(|u| {
+                u.faction != attacker_faction
+                    && u.is_alive()
+                    && u.grid_x == cursor_grid_x
+                    && u.grid_y == cursor_grid_y
+            }) {
+                let (mover, enemy) = two_mut(&mut units, sel, enemy_idx);
+                if input::handle_movement_attack_click(
+                    &rl,
+                    mover,
+                    &came_from,
+                    &valid_attack_positions,
+                    !valid_attack_positions.is_empty(),
+                    enemy,
+                    cursor_grid_x,
+                    cursor_grid_y,
+                ) {
+                    if mover.state != UnitState::ChoosingPosition {
+                        selected_unit = None;
+                    }
                 }
             }
         }
@@ -550,7 +587,7 @@ fn main() {
 
         let hovering_selectable_unit = selected_unit.is_none()
             && units.iter().any(|u| {
-                u.faction == Faction::Human
+                u.faction == player_faction
                     && u.is_alive()
                     && u.state == UnitState::Idle
                     && u.grid_x == cursor_grid_x
@@ -570,12 +607,7 @@ fn main() {
         if game_mode == game_mode::GameMode::TitleScreen {
             render::draw_title_screen(&mut d, &assets, &hud, mouse_position);
         } else if game_mode == game_mode::GameMode::FactionSelectionScreen {
-            render::draw_faction_selection_screen(
-                &mut d,
-                &mut assets,
-                delta_time,
-                mouse_position,
-            );
+            render::draw_faction_selection_screen(&mut d, &mut assets, delta_time, mouse_position);
         } else if game_mode == game_mode::GameMode::CombatScreen {
             if let Some((attacker_idx, defender_idx)) = active_combat {
                 render::draw_combat_screen(
@@ -597,15 +629,13 @@ fn main() {
                 delta_time,
                 &tile_map,
                 &hud,
-                &units[0],
-                &units[1],
-                &units[2],
+                &units,
                 game_mode,
                 &current_turn,
                 wait_button_visible,
                 &move_range,
                 &valid_attack_positions,
-                wraith_attackable,
+                &attackable_enemy_positions,
                 cursor_grid_x,
                 cursor_grid_y,
                 cursor.cursor_type,

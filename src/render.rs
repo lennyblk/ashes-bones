@@ -333,15 +333,13 @@ pub fn draw_grid_screen(
     delta_time: f32,
     tile_map: &TileMap,
     hud: &HudRects,
-    soldier: &Unit,
-    wraith: &Unit,
-    cavalry: &Unit,
+    units: &[Unit],
     game_mode: GameMode,
     current_turn: &TurnPhase,
     wait_button_visible: bool,
     move_range: &[(i32, i32)],
     valid_attack_positions: &[(i32, i32)],
-    wraith_attackable: bool,
+    attackable_enemy_positions: &[(i32, i32)],
     cursor_grid_x: i32,
     cursor_grid_y: i32,
     cursor_type: CursorType,
@@ -381,8 +379,7 @@ pub fn draw_grid_screen(
         );
     }
 
-    if soldier.state == UnitState::ChoosingPosition || cavalry.state == UnitState::ChoosingPosition
-    {
+    if units.iter().any(|u| u.state == UnitState::ChoosingPosition) {
         for (x, y) in valid_attack_positions {
             d.draw_rectangle(
                 x * TILE_SIZE,
@@ -394,10 +391,10 @@ pub fn draw_grid_screen(
         }
     }
 
-    if wraith_attackable {
+    for (x, y) in attackable_enemy_positions {
         d.draw_rectangle(
-            wraith.grid_x * TILE_SIZE,
-            wraith.grid_y * TILE_SIZE,
+            x * TILE_SIZE,
+            y * TILE_SIZE,
             TILE_SIZE,
             TILE_SIZE,
             Color::new(255, 0, 0, 180), // rouge transparent
@@ -417,43 +414,19 @@ pub fn draw_grid_screen(
         );
     }
 
-    if soldier.is_alive() {
-        let animation = assets.soldier.for_state_mut(soldier.state);
-        draw_unit_sprite(
-            d,
-            animation,
-            soldier,
-            soldier.screen_x,
-            soldier.screen_y,
-            128.0,
-            delta_time,
-        );
-    }
-
-    if wraith.is_alive() {
-        let animation = assets.wraith.for_state_mut(wraith.state);
-        draw_unit_sprite(
-            d,
-            animation,
-            wraith,
-            wraith.screen_x,
-            wraith.screen_y,
-            128.0,
-            delta_time,
-        );
-    }
-
-    if cavalry.is_alive() {
-        let animation = assets.cavalry.for_state_mut(cavalry.state);
-        draw_unit_sprite(
-            d,
-            animation,
-            cavalry,
-            cavalry.screen_x,
-            cavalry.screen_y,
-            128.0,
-            delta_time,
-        );
+    for unit in units {
+        if unit.is_alive() {
+            let animation = assets.animation_set_mut(unit.class).for_state_mut(unit.state);
+            draw_unit_sprite(
+                d,
+                animation,
+                unit,
+                unit.screen_x,
+                unit.screen_y,
+                128.0,
+                delta_time,
+            );
+        }
     }
 
     // écran de fin ----------------------------------------------------------
