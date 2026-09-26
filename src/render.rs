@@ -80,6 +80,133 @@ pub fn draw_title_screen(
         hud.btn_settings_title_screen,
     );
     draw_texture_at(d, &assets.btn_exit_title_screen, hud.btn_exit_title_screen);
+    draw_texture_at(d, &assets.btn_guide_title_screen, hud.btn_learn_title_screen);
+
+    d.draw_texture_ex(
+        assets.cursor_texture(CursorType::Normal),
+        Vector2::new(mouse_position.x, mouse_position.y),
+        0.0,
+        0.7,
+        Color::WHITE,
+    );
+}
+
+// Pause screen --------------------------------------------------------------------
+pub fn draw_pause_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &Assets,
+    hud: &HudRects,
+    mouse_position: Vector2,
+) {
+    draw_fullscreen_texture(d, &assets.menu_background_texture);
+
+    let title = "Pause";
+    let title_size = 48.0;
+    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
+    let title_pos = Vector2::new(
+        SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0,
+        hud.btn_pause_play.y - title_size - 30.0,
+    );
+    // petite ombre pour rester lisible sur un ciel clair
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos + Vector2::new(2.0, 2.0),
+        title_size,
+        1.0,
+        Color::new(0, 0, 0, 160),
+    );
+    d.draw_text_ex(&assets.hud_font, title, title_pos, title_size, 1.0, Color::WHITE);
+
+    for (texture, rect) in [
+        (&assets.btn_play, hud.btn_pause_play),
+        (&assets.btn_guide, hud.btn_pause_guide),
+        (&assets.btn_settings, hud.btn_pause_settings),
+        (&assets.btn_back, hud.btn_pause_back),
+        (&assets.btn_exit, hud.btn_pause_exit),
+    ] {
+        draw_texture_at(d, texture, rect);
+    }
+
+    d.draw_texture_ex(
+        assets.cursor_texture(CursorType::Normal),
+        Vector2::new(mouse_position.x, mouse_position.y),
+        0.0,
+        0.7,
+        Color::WHITE,
+    );
+}
+
+// Guide screen --------------------------------------------------------------------
+pub fn draw_guide_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &mut Assets,
+    delta_time: f32,
+    hud: &HudRects,
+    mouse_position: Vector2,
+) {
+    draw_fullscreen_texture(d, &assets.menu_background_texture);
+
+    let title = "How to play";
+    let title_size = 48.0;
+    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
+    let title_pos = Vector2::new(SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0, 40.0);
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos + Vector2::new(2.0, 2.0),
+        title_size,
+        1.0,
+        Color::new(0, 0, 0, 160),
+    );
+    d.draw_text_ex(&assets.hud_font, title, title_pos, title_size, 1.0, Color::WHITE);
+
+    // panneau semi-transparent pour rester lisible sur le fond
+    let panel = Rectangle {
+        x: 220.0,
+        y: 130.0,
+        width: SCREEN_WIDTH as f32 - 440.0,
+        height: 300.0,
+    };
+    d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 190));
+    d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
+
+    let lines = [
+        "Left click a unit on your turn to select it",
+        "Left click a highlighted tile to move there",
+        "Left click an enemy in range to attack it",
+        "B cancels a move/attack in progress",
+        "Escape opens this pause menu during a match",
+        "Win by wiping out every enemy unit",
+    ];
+    let line_size = 22.0;
+    let mut y = panel.y + 30.0;
+    for line in lines {
+        d.draw_text_ex(
+            &assets.hud_font,
+            line,
+            Vector2::new(panel.x + 30.0, y),
+            line_size,
+            1.0,
+            Color::WHITE,
+        );
+        y += line_size + 18.0;
+    }
+
+    // un perso de chaque camp qui vit un peu la scène, en idle
+    let sprite_size = 220.0;
+    let sprite_top = SCREEN_HEIGHT as f32 - sprite_size - 20.0;
+    draw_idle_card(d, &mut assets.soldier.idle, 110.0, sprite_top, sprite_size, delta_time);
+    draw_idle_card(
+        d,
+        &mut assets.wraith.idle,
+        SCREEN_WIDTH as f32 - 110.0,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+
+    ui::draw_text_button(d, &assets.hud_font, hud.btn_guide_back, "Back");
 
     d.draw_texture_ex(
         assets.cursor_texture(CursorType::Normal),

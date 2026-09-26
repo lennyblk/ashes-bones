@@ -118,6 +118,10 @@ pub fn cancel_pressed(rl: &RaylibHandle) -> bool {
     rl.is_key_pressed(KEY_B)
 }
 
+pub fn pause_pressed(rl: &RaylibHandle) -> bool {
+    rl.is_key_pressed(KEY_ESCAPE)
+}
+
 pub fn is_button_clicked(
     mouse_position: Vector2,
     mouse_clicked: bool,

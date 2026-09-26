@@ -4,6 +4,8 @@ pub enum GameMode {
     CombatScreen,
     GridScreen,
     FactionSelectionScreen,
+    PauseScreen,
+    GuideScreen,
     Victory,
     Defeat,
 }

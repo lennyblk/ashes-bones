@@ -13,7 +13,14 @@ pub struct HudRects {
     pub title: Rectangle,
     pub btn_play_title_screen: Rectangle,
     pub btn_settings_title_screen: Rectangle,
+    pub btn_learn_title_screen: Rectangle,
     pub btn_exit_title_screen: Rectangle,
+    pub btn_pause_play: Rectangle,
+    pub btn_pause_guide: Rectangle,
+    pub btn_pause_settings: Rectangle,
+    pub btn_pause_back: Rectangle,
+    pub btn_pause_exit: Rectangle,
+    pub btn_guide_back: Rectangle,
 }
 
 impl HudRects {
@@ -66,7 +73,7 @@ impl HudRects {
         let menu_btn_height = 52.0;
         let menu_btn_gap = 16.0;
 
-        let menu_total_height = menu_btn_height * 3.0 + menu_btn_gap * 2.0;
+        let menu_total_height = menu_btn_height * 4.0 + menu_btn_gap * 3.0;
         let menu_top = SCREEN_HEIGHT as f32 / 2.0 - menu_total_height / 2.0 + 60.0;
         let btn_play_title_screen = Rectangle {
             x: SCREEN_WIDTH as f32 / 2.0 - menu_btn_width / 2.0,
@@ -80,12 +87,61 @@ impl HudRects {
             width: menu_btn_width,
             height: menu_btn_height,
         };
-        let btn_exit_title_screen = Rectangle {
+        let btn_learn_title_screen = Rectangle {
             x: btn_play_title_screen.x,
             y: btn_settings_title_screen.y + menu_btn_height + menu_btn_gap,
             width: menu_btn_width,
             height: menu_btn_height,
         };
+        let btn_exit_title_screen = Rectangle {
+            x: btn_play_title_screen.x,
+            y: btn_learn_title_screen.y + menu_btn_height + menu_btn_gap,
+            width: menu_btn_width,
+            height: menu_btn_height,
+        };
+
+        // menu pause : mêmes boutons/taille que btn_retry/back/exit (128x48) ----
+        let pause_btn_width = 128.0;
+        let pause_btn_height = 48.0;
+        let pause_total_height = pause_btn_height * 5.0 + menu_btn_gap * 4.0;
+        let pause_top = SCREEN_HEIGHT as f32 / 2.0 - pause_total_height / 2.0;
+        let btn_pause_play = Rectangle {
+            x: SCREEN_WIDTH as f32 / 2.0 - pause_btn_width / 2.0,
+            y: pause_top,
+            width: pause_btn_width,
+            height: pause_btn_height,
+        };
+        let btn_pause_guide = Rectangle {
+            x: btn_pause_play.x,
+            y: btn_pause_play.y + pause_btn_height + menu_btn_gap,
+            width: pause_btn_width,
+            height: pause_btn_height,
+        };
+        let btn_pause_settings = Rectangle {
+            x: btn_pause_play.x,
+            y: btn_pause_guide.y + pause_btn_height + menu_btn_gap,
+            width: pause_btn_width,
+            height: pause_btn_height,
+        };
+        let btn_pause_back = Rectangle {
+            x: btn_pause_play.x,
+            y: btn_pause_settings.y + pause_btn_height + menu_btn_gap,
+            width: pause_btn_width,
+            height: pause_btn_height,
+        };
+        let btn_pause_exit = Rectangle {
+            x: btn_pause_play.x,
+            y: btn_pause_back.y + pause_btn_height + menu_btn_gap,
+            width: pause_btn_width,
+            height: pause_btn_height,
+        };
+        let btn_guide_back = Rectangle {
+            x: SCREEN_WIDTH as f32 / 2.0 - pause_btn_width / 2.0,
+            y: SCREEN_HEIGHT as f32 - pause_btn_height - 30.0,
+            width: pause_btn_width,
+            height: pause_btn_height,
+        };
+
         HudRects {
             btn_end_turn,
             btn_wait,
@@ -97,9 +153,36 @@ impl HudRects {
             title,
             btn_play_title_screen,
             btn_settings_title_screen,
+            btn_learn_title_screen,
             btn_exit_title_screen,
+            btn_pause_play,
+            btn_pause_guide,
+            btn_pause_settings,
+            btn_pause_back,
+            btn_pause_exit,
+            btn_guide_back,
         }
     }
+}
+
+/// bouton texte simple (rectangle + label centré) pour les écrans qui n'ont pas
+/// d'illustration dédiée (pause, guide)
+pub fn draw_text_button(d: &mut RaylibDrawHandle, font: &Font, rect: Rectangle, label: &str) {
+    d.draw_rectangle_rec(rect, Color::new(30, 30, 30, 220));
+    d.draw_rectangle_lines_ex(rect, 2.0, Color::WHITE);
+    let font_size = 22.0;
+    let text_size = font.measure_text(label, font_size, 1.0);
+    d.draw_text_ex(
+        font,
+        label,
+        Vector2::new(
+            rect.x + rect.width / 2.0 - text_size.x / 2.0,
+            rect.y + rect.height / 2.0 - text_size.y / 2.0,
+        ),
+        font_size,
+        1.0,
+        Color::WHITE,
+    );
 }
 
 pub fn draw_health_bar(

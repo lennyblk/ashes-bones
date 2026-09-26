@@ -33,6 +33,7 @@ fn main() {
         .title("Ashes&Bones")
         .build();
     rl.hide_cursor();
+    rl.set_exit_key(None); // Échap ouvre le menu pause, ferme plus le jeu
 
     let mut assets = assets::load_assets(&mut rl, &thread);
 
@@ -184,6 +185,10 @@ fn main() {
     let mut player_faction = Faction::Human;
     let mut result_display: Option<(minigame::TimingResult, f32, f32)> = None; // alert qui pop au resultat du minigame
 
+    // écran auquel revenir en quittant le menu pause / le guide
+    let mut paused_from = game_mode::GameMode::GridScreen;
+    let mut guide_return_to = game_mode::GameMode::TitleScreen;
+
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
@@ -192,14 +197,33 @@ fn main() {
         fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
             rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
         }
-        for unit in units.iter_mut() {
-            unit.update_position(delta_time);
-            unit.advance_path();
+        // en pause ou dans le guide, la partie est gelée : ni mouvement ni animation
+        if !matches!(
+            game_mode,
+            game_mode::GameMode::PauseScreen | game_mode::GameMode::GuideScreen
+        ) {
+            for unit in units.iter_mut() {
+                unit.update_position(delta_time);
+                unit.advance_path();
+            }
         }
 
         let mut click_consumed = false;
 
-        // title screen : play / settings / exit ------------------------------
+        // Échap : pause pendant une partie, ou retour depuis pause/guide
+        if input::pause_pressed(&rl) {
+            match game_mode {
+                game_mode::GameMode::GridScreen | game_mode::GameMode::CombatScreen => {
+                    paused_from = game_mode;
+                    game_mode = game_mode::GameMode::PauseScreen;
+                }
+                game_mode::GameMode::PauseScreen => game_mode = paused_from,
+                game_mode::GameMode::GuideScreen => game_mode = guide_return_to,
+                _ => {}
+            }
+        }
+
+        // title screen : play / settings / learn / exit -----------------------
         if game_mode == game_mode::GameMode::TitleScreen {
             let clicked = mouse_is_clicked(&rl);
             if input::is_button_clicked(mouse_position, clicked, hud.btn_exit_title_screen) {
@@ -208,10 +232,52 @@ fn main() {
             if input::is_button_clicked(mouse_position, clicked, hud.btn_settings_title_screen) {
                 // TODO: écran settings
             }
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_learn_title_screen) {
+                guide_return_to = game_mode::GameMode::TitleScreen;
+                game_mode = game_mode::GameMode::GuideScreen;
+                click_consumed = true;
+            }
             if input::is_button_clicked(mouse_position, clicked, hud.btn_play_title_screen) {
                 game_mode = game_mode::GameMode::FactionSelectionScreen;
                 click_consumed = true;
             }
+        }
+
+        // menu pause : play / guide / settings / back / exit -------------------
+        if game_mode == game_mode::GameMode::PauseScreen {
+            let clicked = mouse_is_clicked(&rl);
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_exit) {
+                break;
+            }
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_settings) {
+                // TODO: écran settings
+            }
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_guide) {
+                guide_return_to = game_mode::GameMode::PauseScreen;
+                game_mode = game_mode::GameMode::GuideScreen;
+            }
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_play) {
+                game_mode = paused_from;
+            }
+            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_back) {
+                units = units_initial.clone();
+                game_mode = game_mode::GameMode::TitleScreen;
+                current_turn = game_mode::TurnPhase::PlayerTurn;
+                enemy_turn_delay = 0.0;
+                active_combat = None;
+                attack_animation_started = false;
+                combat_entering_timer = 0.0;
+                combat_ready_timer = 0.0;
+                combat_exit_pause_timer = 0.0;
+                selected_unit = None;
+            }
+        }
+
+        // guide : bouton back (Échap marche aussi, voir plus haut) --------------
+        if game_mode == game_mode::GameMode::GuideScreen
+            && input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_guide_back)
+        {
+            game_mode = guide_return_to;
         }
 
         // Faction selection screen : Human / Undead --------------------------------
@@ -651,6 +717,10 @@ fn main() {
             render::draw_title_screen(&mut d, &assets, &hud, mouse_position);
         } else if game_mode == game_mode::GameMode::FactionSelectionScreen {
             render::draw_faction_selection_screen(&mut d, &mut assets, delta_time, mouse_position);
+        } else if game_mode == game_mode::GameMode::PauseScreen {
+            render::draw_pause_screen(&mut d, &assets, &hud, mouse_position);
+        } else if game_mode == game_mode::GameMode::GuideScreen {
+            render::draw_guide_screen(&mut d, &mut assets, delta_time, &hud, mouse_position);
         } else if game_mode == game_mode::GameMode::CombatScreen {
             if let Some((attacker_idx, defender_idx)) = active_combat {
                 render::draw_combat_screen(
