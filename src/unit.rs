@@ -80,7 +80,7 @@ impl Unit {
         // un valeur positif que j'aille a gauche ou a droite, comme ca je snap pas
         // trop tot si c'est negatif
         if distance_x.abs() > 1.0 {
-            self.screen_x += distance_x * delta_time * 3.0; // le chiffre est la vitesse de déplacement
+            self.screen_x += distance_x * delta_time * 3.5; // le chiffre est la vitesse de déplacement
         } else {
             self.screen_x = target_x as f32;
         }

@@ -165,8 +165,6 @@ impl HudRects {
     }
 }
 
-/// bouton texte simple (rectangle + label centré) pour les écrans qui n'ont pas
-/// d'illustration dédiée (pause, guide)
 pub fn draw_text_button(d: &mut RaylibDrawHandle, font: &Font, rect: Rectangle, label: &str) {
     d.draw_rectangle_rec(rect, Color::new(30, 30, 30, 220));
     d.draw_rectangle_lines_ex(rect, 2.0, Color::WHITE);

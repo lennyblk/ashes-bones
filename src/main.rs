@@ -35,6 +35,12 @@ fn main() {
     rl.hide_cursor();
     rl.set_exit_key(None); // Échap ouvre le menu pause, ferme plus le jeu
 
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .subsec_nanos();
+    rl.set_random_seed(seed);
+
     let mut assets = assets::load_assets(&mut rl, &thread);
 
     fn grid_to_screen_x(grid_x: i32) -> f32 {
@@ -125,43 +131,45 @@ fn main() {
         }
     }
 
+    /// gauche de la rivière (colonnes 11-12), undead à droite, un humain sur la petite
+    /// île en haut à gauche. Appelée à chaque vrai début de partie (pas juste au lancement)
     #[rustfmt::skip]
-    let mut units: Vec<Unit> = vec![
-        // Human
-        spawn_unit("Soldier",     Faction::Human,  UnitClass::Soldier,     2, 120, 1, 45, 10),
-        spawn_unit("Cavalry",     Faction::Human,  UnitClass::Cavalry,     4,  90, 1, 55,  7),
-        spawn_unit("Assassin",    Faction::Human,  UnitClass::Assassin,    4,  65, 1, 85,  2),
-        spawn_unit("Longbowman",  Faction::Human,  UnitClass::Longbowman,  2,  75, 3, 50,  5),
-        spawn_unit("Mage",        Faction::Human,  UnitClass::Mage,        2,  55, 2, 80,  1),
-        spawn_unit("Priest",      Faction::Human,  UnitClass::Priest,      2,  95, 2, 35,  9),
+    fn fresh_units(rl: &RaylibHandle, blocked_tiles: &[(i32, i32)]) -> Vec<Unit> {
+        let mut units: Vec<Unit> = vec![
+            // Human
+            spawn_unit("Soldier",     Faction::Human,  UnitClass::Soldier,     2, 120, 1, 45, 10),
+            spawn_unit("Cavalry",     Faction::Human,  UnitClass::Cavalry,     4,  90, 1, 55,  7),
+            spawn_unit("Assassin",    Faction::Human,  UnitClass::Assassin,    4,  65, 1, 85,  2),
+            spawn_unit("Longbowman",  Faction::Human,  UnitClass::Longbowman,  2,  75, 3, 50,  5),
+            spawn_unit("Mage",        Faction::Human,  UnitClass::Mage,        2,  55, 2, 80,  1),
+            spawn_unit("Priest",      Faction::Human,  UnitClass::Priest,      2,  95, 2, 35,  9),
 
-        // Undead
-        spawn_unit("Wraith",      Faction::Undead, UnitClass::Wraith,      3,  90, 1, 50,  8),
-        spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 2, 200, 1, 65, 14),
-        spawn_unit("Banshee",     Faction::Undead, UnitClass::Banshee,     2,  60, 2, 78,  2),
-        spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       4,  85, 1, 60,  5),
-        spawn_unit("Skeleton",    Faction::Undead, UnitClass::Skeleton,    2,  80, 1, 50,  6),
-        spawn_unit("Necromancer", Faction::Undead, UnitClass::Necromancer, 2,  60, 2, 75,  2),
-    ];
+            // Undead
+            spawn_unit("Wraith",      Faction::Undead, UnitClass::Wraith,      3,  90, 1, 50,  8),
+            spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 2, 200, 1, 65, 14),
+            spawn_unit("Banshee",     Faction::Undead, UnitClass::Banshee,     2,  60, 2, 78,  2),
+            spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       4,  85, 1, 60,  5),
+            spawn_unit("Skeleton",    Faction::Undead, UnitClass::Skeleton,    2,  80, 1, 50,  6),
+            spawn_unit("Necromancer", Faction::Undead, UnitClass::Necromancer, 2,  60, 2, 75,  2),
+        ];
 
-    // dispersion : humains à gauche de la rivière (colonnes 11-12), undead à droite,
-    // un humain sur la petite île en haut à gauche
-    let river_x = 11;
-    let mut taken_tiles: Vec<(i32, i32)> = vec![(2, 2)];
-    place_unit(&mut units[0], 2, 2);
-    for unit in units.iter_mut().skip(1) {
-        let (x_min, x_max) = if unit.faction == Faction::Human {
-            (0, river_x - 1)
-        } else {
-            (river_x + 2, GRID_COLS - 1)
-        };
-        let tile = random_open_tile(&rl, &blocked_tiles, &taken_tiles, x_min, x_max);
-        place_unit(unit, tile.0, tile.1);
-        taken_tiles.push(tile);
+        let river_x = 11;
+        let mut taken_tiles: Vec<(i32, i32)> = vec![(2, 2)];
+        place_unit(&mut units[0], 2, 2);
+        for unit in units.iter_mut().skip(1) {
+            let (x_min, x_max) = if unit.faction == Faction::Human {
+                (0, river_x - 1)
+            } else {
+                (river_x + 2, GRID_COLS - 1)
+            };
+            let tile = random_open_tile(rl, blocked_tiles, &taken_tiles, x_min, x_max);
+            place_unit(unit, tile.0, tile.1);
+            taken_tiles.push(tile);
+        }
+        units
     }
 
-    // état de départ, pour le bouton retry
-    let units_initial = units.clone();
+    let mut units = fresh_units(&rl, &blocked_tiles);
 
     let mut game_mode = game_mode::GameMode::TitleScreen;
     let mut attacker_combat_x: f32 = 0.0;
@@ -260,7 +268,7 @@ fn main() {
                 game_mode = paused_from;
             }
             if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_back) {
-                units = units_initial.clone();
+                units = fresh_units(&rl, &blocked_tiles);
                 game_mode = game_mode::GameMode::TitleScreen;
                 current_turn = game_mode::TurnPhase::PlayerTurn;
                 enemy_turn_delay = 0.0;
@@ -303,7 +311,7 @@ fn main() {
                 break;
             }
             if input::is_button_clicked(mouse_position, clicked, hud.btn_back) {
-                units = units_initial.clone();
+                units = fresh_units(&rl, &blocked_tiles);
                 game_mode = game_mode::GameMode::TitleScreen;
                 current_turn = game_mode::TurnPhase::PlayerTurn;
                 enemy_turn_delay = 0.0;
@@ -316,7 +324,7 @@ fn main() {
                 click_consumed = true;
             }
             if input::is_button_clicked(mouse_position, clicked, hud.btn_retry) {
-                units = units_initial.clone();
+                units = fresh_units(&rl, &blocked_tiles);
                 game_mode = game_mode::GameMode::GridScreen;
                 current_turn = game_mode::TurnPhase::PlayerTurn;
                 enemy_turn_delay = 0.0;
