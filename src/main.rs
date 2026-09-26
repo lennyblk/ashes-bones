@@ -572,7 +572,6 @@ fn main() {
         } else if game_mode == game_mode::GameMode::FactionSelectionScreen {
             render::draw_faction_selection_screen(
                 &mut d,
-                &thread,
                 &mut assets,
                 delta_time,
                 mouse_position,
@@ -581,7 +580,6 @@ fn main() {
             if let Some((attacker_idx, defender_idx)) = active_combat {
                 render::draw_combat_screen(
                     &mut d,
-                    &thread,
                     &mut assets,
                     delta_time,
                     &units[attacker_idx],
@@ -595,7 +593,6 @@ fn main() {
         } else {
             render::draw_grid_screen(
                 &mut d,
-                &thread,
                 &mut assets,
                 delta_time,
                 &tile_map,

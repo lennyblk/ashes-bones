@@ -600,7 +600,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .load_texture(thread, "assets/backgrounds/plains2.png")
         .unwrap();
     let hud_font = rl
-        .load_font_ex(thread, "assets/fonts/BerkshireSwash-Regular.ttf", 96, None)
+        .load_font_ex(thread, "assets/fonts/PixelParchment.ttf", 96, None)
         .unwrap();
     hud_font
         .texture()

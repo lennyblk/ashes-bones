@@ -114,7 +114,6 @@ fn draw_fullscreen_texture(d: &mut RaylibDrawHandle, texture: &Texture2D) {
 // Faction selection screen ------------------------------------------------------
 fn draw_idle_card(
     d: &mut RaylibDrawHandle,
-    thread: &RaylibThread,
     animation: &mut Animation,
     center_x: f32,
     top_y: f32,
@@ -127,15 +126,6 @@ fn draw_idle_card(
     let scale = (sprite_size / frame.width).min(sprite_size / frame.height);
     let dest_width = frame.width * scale;
     let dest_height = frame.height * scale;
-    // raylib "batch" les draw calls (le vrai rendu GPU arrive au flush du batch, pas
-    // ici) alors que set_texture_filter change l'état de la texture immédiatement :
-    // remettre "nearest" juste après ce draw_texture_pro annulerait le bilinéaire
-    // avant même que ce dessin soit vraiment envoyé au GPU. On laisse donc en
-    // bilinéaire ; draw_grid_screen/draw_combat_screen remettent "nearest" eux-mêmes
-    // avant de dessiner, pour ne pas hériter de cet état.
-    animation
-        .texture
-        .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_BILINEAR);
     d.draw_texture_pro(
         &animation.texture,
         frame,
@@ -151,38 +141,26 @@ fn draw_idle_card(
     );
 }
 
-/// centres des 3 colonnes de sprites pour une faction, centrées sur `center_x`
-fn faction_column_centers(center_x: f32, sprite_size: f32, col_gap: f32) -> [f32; 3] {
-    let total_width = sprite_size * 3.0 + col_gap * 2.0;
-    let first = center_x - total_width / 2.0 + sprite_size / 2.0;
-    [
-        first,
-        first + sprite_size + col_gap,
-        first + 2.0 * (sprite_size + col_gap),
-    ]
+/// centres des 3 colonnes de sprites pour une faction, centrées sur `center_x`.
+/// `col_pitch` est l'espacement entre centres
+fn faction_column_centers(center_x: f32, col_pitch: f32) -> [f32; 3] {
+    [center_x - col_pitch, center_x, center_x + col_pitch]
 }
 
 pub fn draw_faction_selection_screen(
     d: &mut RaylibDrawHandle,
-    thread: &RaylibThread,
     assets: &mut Assets,
     delta_time: f32,
     mouse_position: Vector2,
 ) {
     let half_width = SCREEN_WIDTH / 2;
-    d.draw_rectangle(
-        0,
-        0,
-        half_width,
-        SCREEN_HEIGHT,
-        Color::new(40, 70, 140, 255),
-    );
+    d.draw_rectangle(0, 0, half_width, SCREEN_HEIGHT, Color::new(18, 18, 18, 255));
     d.draw_rectangle(
         half_width,
         0,
         SCREEN_WIDTH - half_width,
         SCREEN_HEIGHT,
-        Color::new(140, 30, 30, 255),
+        Color::new(18, 18, 18, 255),
     );
 
     // surbrillance du côté survolé par la souris
@@ -196,10 +174,8 @@ pub fn draw_faction_selection_screen(
         0,
         half_width,
         SCREEN_HEIGHT,
-        Color::new(255, 255, 255, 15),
+        Color::new(255, 255, 255, 5),
     );
-
-    d.draw_rectangle(SCREEN_WIDTH / 2 - 2, 0, 4, SCREEN_HEIGHT, Color::WHITE);
 
     let title = "Choose your faction";
     let title_size = 64.0;
@@ -229,22 +205,21 @@ pub fn draw_faction_selection_screen(
         );
     }
 
-    let sprite_size = 170.0;
-    let col_gap = 16.0;
-    let row_gap = 20.0;
+    let sprite_size = 250.0;
+    let col_pitch = 170.0;
+    let row_gap = 10.0;
     let rows_top = 240.0;
     let rows_bottom = SCREEN_HEIGHT as f32;
     let rows_height = sprite_size * 2.0 + row_gap;
     let row1_y = rows_top + (rows_bottom - rows_top - rows_height) / 2.0;
     let row2_y = row1_y + sprite_size + row_gap;
 
-    let human_cols = faction_column_centers(human_center_x, sprite_size, col_gap);
-    let undead_cols = faction_column_centers(undead_center_x, sprite_size, col_gap);
+    let human_cols = faction_column_centers(human_center_x, col_pitch);
+    let undead_cols = faction_column_centers(undead_center_x, col_pitch);
 
     // Human : soldier / cavalry / assassin en haut, longbowman / mage / priest en bas
     draw_idle_card(
         d,
-        thread,
         &mut assets.soldier.idle,
         human_cols[0],
         row1_y,
@@ -253,7 +228,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.cavalry.idle,
         human_cols[1],
         row1_y,
@@ -262,7 +236,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.assassin.idle,
         human_cols[2],
         row1_y,
@@ -271,7 +244,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.longbowman.idle,
         human_cols[0],
         row2_y,
@@ -280,7 +252,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.mage.idle,
         human_cols[1],
         row2_y,
@@ -289,7 +260,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.priest.idle,
         human_cols[2],
         row2_y,
@@ -300,7 +270,6 @@ pub fn draw_faction_selection_screen(
     // Undead : blood knight / banshee / wraith en haut, ghoul / necromancer / skeleton en bas
     draw_idle_card(
         d,
-        thread,
         &mut assets.blood_knight.idle,
         undead_cols[0],
         row1_y,
@@ -309,7 +278,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.banshee.idle,
         undead_cols[1],
         row1_y,
@@ -318,7 +286,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.wraith.idle,
         undead_cols[2],
         row1_y,
@@ -327,7 +294,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.ghoul.idle,
         undead_cols[0],
         row2_y,
@@ -336,7 +302,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.necromancer.idle,
         undead_cols[1],
         row2_y,
@@ -345,7 +310,6 @@ pub fn draw_faction_selection_screen(
     );
     draw_idle_card(
         d,
-        thread,
         &mut assets.skeleton.idle,
         undead_cols[2],
         row2_y,
@@ -362,19 +326,9 @@ pub fn draw_faction_selection_screen(
     );
 }
 
-/// remet le filtrage "nearest" (pixel-art net) sur les textures idle des unités
-/// jouables, au cas où l'écran de sélection de faction les aurait laissées en
-/// bilinéaire (voir draw_idle_card)
-fn reset_unit_texture_filters(assets: &Assets, thread: &RaylibThread) {
-    for texture in [&assets.soldier.idle.texture, &assets.wraith.idle.texture] {
-        texture.set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
-    }
-}
-
 // Grid screen mode ------------------------------------------------------------
 pub fn draw_grid_screen(
     d: &mut RaylibDrawHandle,
-    thread: &RaylibThread,
     assets: &mut Assets,
     delta_time: f32,
     tile_map: &TileMap,
@@ -393,10 +347,6 @@ pub fn draw_grid_screen(
     cursor_type: CursorType,
     mouse_position: Vector2,
 ) {
-    // l'écran de sélection de faction laisse ces textures en filtrage bilinéaire
-    // (voir draw_idle_card) ; on remet "nearest" avant de dessiner le pixel-art
-    reset_unit_texture_filters(assets, thread);
-
     d.clear_background(Color::BEIGE);
     tile_map.draw(d);
 
@@ -431,7 +381,8 @@ pub fn draw_grid_screen(
         );
     }
 
-    if soldier.state == UnitState::ChoosingPosition || cavalry.state == UnitState::ChoosingPosition {
+    if soldier.state == UnitState::ChoosingPosition || cavalry.state == UnitState::ChoosingPosition
+    {
         for (x, y) in valid_attack_positions {
             d.draw_rectangle(
                 x * TILE_SIZE,
@@ -546,7 +497,6 @@ pub fn draw_grid_screen(
 // écran de combat ------------------------------------------------------------
 pub fn draw_combat_screen(
     d: &mut RaylibDrawHandle,
-    thread: &RaylibThread,
     assets: &mut Assets,
     delta_time: f32,
     attacker: &Unit,
@@ -556,10 +506,6 @@ pub fn draw_combat_screen(
     timing_bar: Option<&TimingBar>,
     result_display: Option<&(TimingResult, f32, f32)>,
 ) {
-    // l'écran de sélection de faction laisse ces textures en filtrage bilinéaire
-    // (voir draw_idle_card) ; on remet "nearest" avant de dessiner le pixel-art
-    reset_unit_texture_filters(assets, thread);
-
     draw_fullscreen_texture(d, &assets.combat_screen_background_texture);
 
     // HUD combat ---------------------------------------------------------------
@@ -571,7 +517,9 @@ pub fn draw_combat_screen(
     let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
 
     if attacker.is_alive() {
-        let animation = assets.animation_set_mut(attacker.class).for_state_mut(attacker.state);
+        let animation = assets
+            .animation_set_mut(attacker.class)
+            .for_state_mut(attacker.state);
         draw_unit_sprite(
             d,
             animation,
@@ -607,7 +555,9 @@ pub fn draw_combat_screen(
         );
     }
     if defender.is_alive() {
-        let animation = assets.animation_set_mut(defender.class).for_state_mut(defender.state);
+        let animation = assets
+            .animation_set_mut(defender.class)
+            .for_state_mut(defender.state);
         draw_unit_sprite(
             d,
             animation,
