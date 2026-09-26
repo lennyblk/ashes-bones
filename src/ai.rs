@@ -67,12 +67,17 @@ pub fn ai_attack_if_in_range(attacker: &mut Unit, defender: &Unit) {
     }
 }
 
-pub fn take_turn(unit: &mut Unit, targets: &[Unit], blocked_tiles: &Vec<(i32, i32)>) {
+pub fn take_turn(
+    unit: &mut Unit,
+    targets: &[Unit],
+    obstacles: &[Unit],
+    blocked_tiles: &Vec<(i32, i32)>,
+) {
     unit.start_turn();
     if let Some(target) = find_closest_target(unit, targets) {
         ai_attack_if_in_range(unit, target);
         if unit.state != UnitState::Attacking {
-            ai_move_toward_target(unit, target, targets, blocked_tiles);
+            ai_move_toward_target(unit, target, obstacles, blocked_tiles);
         }
     }
 }

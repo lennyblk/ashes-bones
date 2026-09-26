@@ -149,6 +149,9 @@ fn main() {
 
     let mut current_turn = game_mode::TurnPhase::PlayerTurn;
     let mut enemy_turn_delay: f32 = 0.0;
+    // ennemis qui restent à jouer ce tour, un par un
+    let mut ai_turn_queue: Vec<usize> = Vec::new();
+    let mut ai_acting_unit: Option<usize> = None;
 
     let mut timing_bar: Option<minigame::TimingBar> = None;
     let mut damage_multiplier: f32 = 1.0;
@@ -271,27 +274,44 @@ fn main() {
         if player_can_act && (end_turn_clicked || all_units_finished) {
             current_turn = game_mode::TurnPhase::EnemyTurn;
             enemy_turn_delay = ENEMY_TURN_DELAY;
+            ai_turn_queue = units
+                .iter()
+                .enumerate()
+                .filter(|(_, u)| u.faction == player_faction.opposite() && u.is_alive())
+                .map(|(i, _)| i)
+                .collect();
+            ai_acting_unit = None;
             selected_unit = None;
             click_consumed = true;
         }
 
-        if current_turn == game_mode::TurnPhase::EnemyTurn && enemy_turn_delay > 0.0 {
-            enemy_turn_delay -= delta_time;
-            if enemy_turn_delay <= 0.0 {
-                enemy_turn_delay = 0.0;
-                let player_units: Vec<Unit> = units
-                    .iter()
-                    .filter(|u| u.faction == player_faction && u.is_alive())
-                    .cloned()
-                    .collect();
-                let ai_indices: Vec<usize> = units
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, u)| u.faction == player_faction.opposite() && u.is_alive())
-                    .map(|(i, _)| i)
-                    .collect();
-                for idx in ai_indices {
-                    ai::take_turn(&mut units[idx], &player_units, &blocked_tiles);
+        // une unité ennemie à la fois, on attend qu'elle finisse avant la suivante
+        if current_turn == game_mode::TurnPhase::EnemyTurn
+            && game_mode == game_mode::GameMode::GridScreen
+        {
+            if let Some(idx) = ai_acting_unit {
+                if !units[idx].is_busy() {
+                    ai_acting_unit = None;
+                    enemy_turn_delay = ENEMY_TURN_DELAY;
+                }
+            } else if enemy_turn_delay > 0.0 {
+                enemy_turn_delay -= delta_time;
+            } else if let Some(idx) = ai_turn_queue.pop() {
+                if units[idx].is_alive() {
+                    let targets: Vec<Unit> = units
+                        .iter()
+                        .filter(|u| u.faction == player_faction && u.is_alive())
+                        .cloned()
+                        .collect();
+                    // toute autre unité vivante (alliée ou ennemie) bloque le passage
+                    let obstacles: Vec<Unit> = units
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, u)| *i != idx && u.is_alive())
+                        .map(|(_, u)| u.clone())
+                        .collect();
+                    ai::take_turn(&mut units[idx], &targets, &obstacles, &blocked_tiles);
+                    ai_acting_unit = Some(idx);
                 }
             }
         }
@@ -417,14 +437,11 @@ fn main() {
             }
         }
 
-        let enemy_settled = units
-            .iter()
-            .filter(|u| u.faction == player_faction.opposite() && u.is_alive())
-            .all(|u| !u.is_busy());
+        let enemy_turn_queue_done = ai_turn_queue.is_empty() && ai_acting_unit.is_none();
         if current_turn == game_mode::TurnPhase::EnemyTurn
             && enemy_turn_delay <= 0.0
             && game_mode == game_mode::GameMode::GridScreen
-            && enemy_settled
+            && enemy_turn_queue_done
         {
             current_turn = game_mode::TurnPhase::PlayerTurn;
             for u in units.iter_mut().filter(|u| u.faction == player_faction) {
