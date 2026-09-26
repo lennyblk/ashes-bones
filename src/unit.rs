@@ -64,7 +64,8 @@ pub struct Unit {
     pub attack_range: i32,
     pub attack_power: i32,
     pub defense: i32,
-    pub attack_target: bool,
+    /// index dans `units` de l'ennemi visé par une attaque en cours (déplacement puis frappe)
+    pub attack_target: Option<usize>,
 }
 
 impl Unit {
@@ -104,7 +105,7 @@ impl Unit {
         {
             self.path.remove(0);
             if self.path.is_empty() {
-                if self.attack_target {
+                if self.attack_target.is_some() {
                     self.state = UnitState::Attacking;
                 } else {
                     self.state = UnitState::Idle;

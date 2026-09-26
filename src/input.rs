@@ -28,7 +28,7 @@ pub fn handle_movement_normal_click(
                 (cursor_grid_x, cursor_grid_y),
             );
             unit.state = UnitState::Walking;
-            unit.attack_target = false;
+            unit.attack_target = None;
             unit.path = waypoints;
             return true;
         }
@@ -36,6 +36,7 @@ pub fn handle_movement_normal_click(
     false
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_movement_attack_click(
     rl: &RaylibHandle,
     unit: &mut Unit,
@@ -43,6 +44,7 @@ pub fn handle_movement_attack_click(
     valid_attack_positions: &Vec<(i32, i32)>,
     enemy_attackable: bool,
     enemy: &Unit,
+    enemy_idx: usize,
     cursor_grid_x: i32,
     cursor_grid_y: i32,
 ) -> bool {
@@ -52,6 +54,10 @@ pub fn handle_movement_attack_click(
         && cursor_grid_x == enemy.grid_x
         && cursor_grid_y == enemy.grid_y
     {
+        // on retient l'ennemi cliqué maintenant : peu importe combien de cases il faut
+        // parcourir ou combien d'autres unités traînent autour, c'est lui qu'on ira frapper
+        unit.attack_target = Some(enemy_idx);
+
         let current_distance =
             (enemy.grid_x - unit.grid_x).abs() + (enemy.grid_y - unit.grid_y).abs();
         if current_distance <= unit.attack_range {
@@ -67,7 +73,6 @@ pub fn handle_movement_attack_click(
                 (unit.grid_x, unit.grid_y),
                 valid_attack_positions[0],
             );
-            unit.attack_target = true;
             unit.state = UnitState::Walking;
             unit.path = waypoints;
         } else {
@@ -100,7 +105,8 @@ pub fn handle_movement_choosing_position_click(
             (unit.grid_x, unit.grid_y),
             (cursor_grid_x, cursor_grid_y),
         );
-        unit.attack_target = true;
+        // attack_target déjà posé par handle_movement_attack_click quand la ChoosingPosition
+        // a commencé, on y touche pas ici
         unit.state = UnitState::Walking;
         unit.path = waypoints;
         return true;

@@ -5,6 +5,7 @@ use crate::{GRID_COLS, GRID_ROWS};
 pub fn ai_move_toward_target(
     unit: &mut Unit,
     target: &Unit,
+    target_idx: usize,
     obstacles: &[Unit],
     blocked_tiles: &Vec<(i32, i32)>,
 ) {
@@ -39,21 +40,25 @@ pub fn ai_move_toward_target(
         // attaque automatique à l'arrivée si la case d'arrivée est à portée
         let distance_at_arrival =
             (destination.0 - target.grid_x).abs() + (destination.1 - target.grid_y).abs();
-        unit.attack_target = distance_at_arrival <= unit.attack_range;
+        unit.attack_target = (distance_at_arrival <= unit.attack_range).then_some(target_idx);
 
         unit.path = path;
         unit.state = UnitState::Walking;
     }
 }
 
-pub fn find_closest_target<'a>(unit: &Unit, candidates: &'a [Unit]) -> Option<&'a Unit> {
+/// cherche la cible la plus proche parmi `candidates` (index dans `units`, unité)
+pub fn find_closest_target<'a>(
+    unit: &Unit,
+    candidates: &'a [(usize, Unit)],
+) -> Option<&'a (usize, Unit)> {
     candidates
         .iter()
-        .filter(|c| c.is_alive())
-        .min_by_key(|c| (c.grid_x - unit.grid_x).abs() + (c.grid_y - unit.grid_y).abs())
+        .filter(|(_, c)| c.is_alive())
+        .min_by_key(|(_, c)| (c.grid_x - unit.grid_x).abs() + (c.grid_y - unit.grid_y).abs())
 }
 
-pub fn ai_attack_if_in_range(attacker: &mut Unit, defender: &Unit) {
+pub fn ai_attack_if_in_range(attacker: &mut Unit, defender: &Unit, defender_idx: usize) {
     if !attacker.path.is_empty() || attacker.state != UnitState::Idle {
         return; // encore en train de bouger, ou déjà en train de faire autre chose
     }
@@ -63,21 +68,21 @@ pub fn ai_attack_if_in_range(attacker: &mut Unit, defender: &Unit) {
 
     if distance <= attacker.attack_range {
         attacker.state = UnitState::Attacking;
-        attacker.attack_target = true;
+        attacker.attack_target = Some(defender_idx);
     }
 }
 
 pub fn take_turn(
     unit: &mut Unit,
-    targets: &[Unit],
+    targets: &[(usize, Unit)],
     obstacles: &[Unit],
     blocked_tiles: &Vec<(i32, i32)>,
 ) {
     unit.start_turn();
-    if let Some(target) = find_closest_target(unit, targets) {
-        ai_attack_if_in_range(unit, target);
+    if let Some((target_idx, target)) = find_closest_target(unit, targets) {
+        ai_attack_if_in_range(unit, target, *target_idx);
         if unit.state != UnitState::Attacking {
-            ai_move_toward_target(unit, target, obstacles, blocked_tiles);
+            ai_move_toward_target(unit, target, *target_idx, obstacles, blocked_tiles);
         }
     }
 }

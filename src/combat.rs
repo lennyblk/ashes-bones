@@ -115,7 +115,7 @@ pub fn resolve_attack(
         defender.state = UnitState::Hurt;
 
         attacker.state = UnitState::Idle;
-        attacker.attack_target = false;
+        attacker.attack_target = None;
         attacker.has_attacked = true;
         *attack_animation_started = false;
     }

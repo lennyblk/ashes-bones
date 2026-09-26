@@ -96,7 +96,7 @@ fn main() {
             attack_range,
             attack_power,
             defense,
-            attack_target: false,
+            attack_target: None,
         }
     }
 
@@ -324,10 +324,11 @@ fn main() {
                 enemy_turn_delay -= delta_time;
             } else if let Some(idx) = ai_turn_queue.pop() {
                 if units[idx].is_alive() {
-                    let targets: Vec<Unit> = units
+                    let targets: Vec<(usize, Unit)> = units
                         .iter()
-                        .filter(|u| u.faction == player_faction && u.is_alive())
-                        .cloned()
+                        .enumerate()
+                        .filter(|(_, u)| u.faction == player_faction && u.is_alive())
+                        .map(|(i, u)| (i, u.clone()))
                         .collect();
                     // toute autre unité vivante (alliée ou ennemie) bloque le passage
                     let obstacles: Vec<Unit> = units
@@ -345,11 +346,9 @@ fn main() {
         // combat -----------------------------------------------------------
         if game_mode == game_mode::GameMode::GridScreen && active_combat.is_none() {
             if let Some(attacker_idx) = units.iter().position(|u| u.state == UnitState::Attacking) {
-                let attacker_faction = units[attacker_idx].faction;
-                if let Some(defender_idx) = units
-                    .iter()
-                    .position(|u| u.faction != attacker_faction && u.is_alive())
-                {
+                // le défenseur, c'est celui que l'attaquant a retenu comme cible au moment
+                // du clic (ou du choix de l'IA) — pas un ennemi quelconque trouvé après coup
+                if let Some(defender_idx) = units[attacker_idx].attack_target {
                     active_combat = Some((attacker_idx, defender_idx));
                 }
             }
@@ -597,6 +596,7 @@ fn main() {
                     &valid_attack_positions,
                     !valid_attack_positions.is_empty(),
                     enemy,
+                    enemy_idx,
                     cursor_grid_x,
                     cursor_grid_y,
                 ) {
