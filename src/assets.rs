@@ -87,7 +87,16 @@ impl Assets {
         match class {
             UnitClass::Soldier => &mut self.soldier,
             UnitClass::Cavalry => &mut self.cavalry,
+            UnitClass::Assassin => &mut self.assassin,
+            UnitClass::Longbowman => &mut self.longbowman,
+            UnitClass::Mage => &mut self.mage,
+            UnitClass::Priest => &mut self.priest,
             UnitClass::Wraith => &mut self.wraith,
+            UnitClass::Banshee => &mut self.banshee,
+            UnitClass::BloodKnight => &mut self.blood_knight,
+            UnitClass::Ghoul => &mut self.ghoul,
+            UnitClass::Skeleton => &mut self.skeleton,
+            UnitClass::Necromancer => &mut self.necromancer,
         }
     }
 }

@@ -503,6 +503,21 @@ pub fn draw_combat_screen(
             delta_time,
         );
     }
+    if defender.is_alive() {
+        let animation = assets
+            .animation_set_mut(defender.class)
+            .for_state_mut(defender.state);
+        draw_unit_sprite(
+            d,
+            animation,
+            defender,
+            defender_combat_x,
+            combat_y,
+            sprite_size,
+            delta_time,
+        );
+    }
+    // les effets d'attaque se dessinent après les deux sprites pour rester au premier plan
     if attacker.state == UnitState::Attacking {
         let effect = &mut assets.animation_set_mut(attacker.class).attack_effect;
         draw_unit_sprite(
@@ -520,20 +535,6 @@ pub fn draw_combat_screen(
         draw_unit_sprite(
             d,
             effect,
-            defender,
-            defender_combat_x,
-            combat_y,
-            sprite_size,
-            delta_time,
-        );
-    }
-    if defender.is_alive() {
-        let animation = assets
-            .animation_set_mut(defender.class)
-            .for_state_mut(defender.state);
-        draw_unit_sprite(
-            d,
-            animation,
             defender,
             defender_combat_x,
             combat_y,

@@ -63,73 +63,101 @@ fn main() {
 
     let hud = ui::HudRects::new();
 
-    let soldier = Unit {
-        name: String::from("Soldier"),
-        faction: Faction::Human,
-        class: UnitClass::Soldier,
-        grid_x: 6,
-        grid_y: 10,
-        screen_x: grid_to_screen_x(6),
-        screen_y: grid_to_screen_y(10),
-        move_points: 2,
-        move_points_remaining: 2,
-        has_attacked: false,
-        hp_points: 100,
-        hp_max_points: 100,
-        path: Vec::new(),
-        state: UnitState::Idle,
-        facing_left: false,
-        attack_range: 1,
-        attack_power: 100,
-        defense: 5,
-        attack_target: false,
-    };
+    let tile_map = map::TileMap::load(&mut rl, &thread, "assets/maps/ashes-bones-map.tmx");
+    let blocked_tiles = tile_map.blocked_tiles.clone();
 
-    let wraith = Unit {
-        name: String::from("Wraith"),
-        faction: Faction::Undead,
-        class: UnitClass::Wraith,
-        grid_x: 5,
-        grid_y: 10,
-        screen_x: grid_to_screen_x(5),
-        screen_y: grid_to_screen_y(10),
-        move_points: 2,
-        move_points_remaining: 2,
-        has_attacked: false,
-        hp_points: 100,
-        hp_max_points: 100,
-        path: Vec::new(),
-        state: UnitState::Idle,
-        facing_left: false,
-        attack_range: 1,
-        attack_power: 15,
-        defense: 10,
-        attack_target: false,
-    };
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_unit(
+        name: &str,
+        faction: Faction,
+        class: UnitClass,
+        move_points: i32,
+        hp: i32,
+        attack_range: i32,
+        attack_power: i32,
+        defense: i32,
+    ) -> Unit {
+        Unit {
+            name: String::from(name),
+            faction,
+            class,
+            grid_x: 0,
+            grid_y: 0,
+            screen_x: 0.0,
+            screen_y: 0.0,
+            move_points,
+            move_points_remaining: move_points,
+            has_attacked: false,
+            hp_points: hp,
+            hp_max_points: hp,
+            path: Vec::new(),
+            state: UnitState::Idle,
+            facing_left: false,
+            attack_range,
+            attack_power,
+            defense,
+            attack_target: false,
+        }
+    }
 
-    let cavalry = Unit {
-        name: String::from("Cavalry"),
-        faction: Faction::Human,
-        class: UnitClass::Cavalry,
-        grid_x: 7,
-        grid_y: 10,
-        screen_x: grid_to_screen_x(7),
-        screen_y: grid_to_screen_y(10),
-        move_points: 3,
-        move_points_remaining: 3,
-        has_attacked: false,
-        hp_points: 90,
-        hp_max_points: 90,
-        path: Vec::new(),
-        state: UnitState::Idle,
-        facing_left: false,
-        attack_range: 1,
-        attack_power: 70,
-        defense: 8,
-        attack_target: false,
-    };
+    fn place_unit(unit: &mut Unit, grid_x: i32, grid_y: i32) {
+        unit.grid_x = grid_x;
+        unit.grid_y = grid_y;
+        unit.screen_x = grid_to_screen_x(grid_x);
+        unit.screen_y = grid_to_screen_y(grid_y);
+    }
 
-    let mut units: Vec<Unit> = vec![soldier, wraith, cavalry];
+    /// pioche une case libre (pas bloquée par la map, pas déjà prise) dans une plage de colonnes
+    fn random_open_tile(
+        rl: &RaylibHandle,
+        blocked_tiles: &[(i32, i32)],
+        taken_tiles: &[(i32, i32)],
+        x_min: i32,
+        x_max: i32,
+    ) -> (i32, i32) {
+        loop {
+            let x = rl.get_random_value::<i32>(x_min..=x_max);
+            let y = rl.get_random_value::<i32>(0..=GRID_ROWS - 1);
+            if !blocked_tiles.contains(&(x, y)) && !taken_tiles.contains(&(x, y)) {
+                return (x, y);
+            }
+        }
+    }
+
+    #[rustfmt::skip]
+    let mut units: Vec<Unit> = vec![
+        // Human
+        spawn_unit("Soldier",     Faction::Human,  UnitClass::Soldier,     2, 120, 1, 45, 10),
+        spawn_unit("Cavalry",     Faction::Human,  UnitClass::Cavalry,     4,  90, 1, 55,  7),
+        spawn_unit("Assassin",    Faction::Human,  UnitClass::Assassin,    4,  65, 1, 85,  2),
+        spawn_unit("Longbowman",  Faction::Human,  UnitClass::Longbowman,  2,  75, 3, 50,  5),
+        spawn_unit("Mage",        Faction::Human,  UnitClass::Mage,        2,  55, 2, 80,  1),
+        spawn_unit("Priest",      Faction::Human,  UnitClass::Priest,      2,  95, 2, 35,  9),
+
+        // Undead
+        spawn_unit("Wraith",      Faction::Undead, UnitClass::Wraith,      3,  90, 1, 50,  8),
+        spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 2, 200, 1, 65, 14),
+        spawn_unit("Banshee",     Faction::Undead, UnitClass::Banshee,     2,  60, 2, 78,  2),
+        spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       4,  85, 1, 60,  5),
+        spawn_unit("Skeleton",    Faction::Undead, UnitClass::Skeleton,    2,  80, 1, 50,  6),
+        spawn_unit("Necromancer", Faction::Undead, UnitClass::Necromancer, 2,  60, 2, 75,  2),
+    ];
+
+    // dispersion : humains à gauche de la rivière (colonnes 11-12), undead à droite,
+    // un humain sur la petite île en haut à gauche
+    let river_x = 11;
+    let mut taken_tiles: Vec<(i32, i32)> = vec![(2, 2)];
+    place_unit(&mut units[0], 2, 2);
+    for unit in units.iter_mut().skip(1) {
+        let (x_min, x_max) = if unit.faction == Faction::Human {
+            (0, river_x - 1)
+        } else {
+            (river_x + 2, GRID_COLS - 1)
+        };
+        let tile = random_open_tile(&rl, &blocked_tiles, &taken_tiles, x_min, x_max);
+        place_unit(unit, tile.0, tile.1);
+        taken_tiles.push(tile);
+    }
 
     // état de départ, pour le bouton retry
     let units_initial = units.clone();
@@ -140,8 +168,6 @@ fn main() {
     let mut combat_entering_timer: f32 = 0.0;
     let mut combat_ready_timer: f32 = 0.0;
     let mut combat_exit_pause_timer: f32 = 0.0;
-    let tile_map = map::TileMap::load(&mut rl, &thread, "assets/maps/ashes-bones-map.tmx");
-    let blocked_tiles = tile_map.blocked_tiles.clone();
 
     let mut attack_animation_started = false;
     // (indice attaquant, indice défenseur) dans `units`

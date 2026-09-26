@@ -19,7 +19,16 @@ impl Faction {
 pub enum UnitClass {
     Soldier,
     Cavalry,
+    Assassin,
+    Longbowman,
+    Mage,
+    Priest,
     Wraith,
+    Banshee,
+    BloodKnight,
+    Ghoul,
+    Skeleton,
+    Necromancer,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
