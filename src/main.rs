@@ -17,7 +17,7 @@ mod unit;
 
 use cursor::{CursorType, Cursors};
 use movement::MovementRange;
-use unit::{Faction, Unit, UnitClass, UnitState, two_mut};
+use unit::{Faction, PendingAction, Unit, UnitClass, UnitState, two_mut};
 
 const TILE_SIZE: i32 = 48;
 const GRID_COLS: i32 = 25;
@@ -83,6 +83,7 @@ fn main() {
         attack_range: i32,
         attack_power: i32,
         defense: i32,
+        can_heal: bool,
     ) -> Unit {
         Unit {
             name: String::from(name),
@@ -103,7 +104,8 @@ fn main() {
             attack_range,
             attack_power,
             defense,
-            attack_target: None,
+            can_heal,
+            pending_action: None,
         }
     }
 
@@ -137,20 +139,20 @@ fn main() {
     fn fresh_units(rl: &RaylibHandle, blocked_tiles: &[(i32, i32)]) -> Vec<Unit> {
         let mut units: Vec<Unit> = vec![
             // Human
-            spawn_unit("Soldier",     Faction::Human,  UnitClass::Soldier,     2, 120, 1, 45, 10),
-            spawn_unit("Cavalry",     Faction::Human,  UnitClass::Cavalry,     4,  90, 1, 55,  7),
-            spawn_unit("Assassin",    Faction::Human,  UnitClass::Assassin,    4,  65, 1, 85,  2),
-            spawn_unit("Longbowman",  Faction::Human,  UnitClass::Longbowman,  2,  75, 3, 50,  5),
-            spawn_unit("Mage",        Faction::Human,  UnitClass::Mage,        2,  55, 2, 80,  1),
-            spawn_unit("Priest",      Faction::Human,  UnitClass::Priest,      2,  95, 2, 35,  9),
+            spawn_unit("Soldier",     Faction::Human,  UnitClass::Soldier,     2, 120, 1, 45, 10, false),
+            spawn_unit("Cavalry",     Faction::Human,  UnitClass::Cavalry,     4,  90, 1, 55,  7, false),
+            spawn_unit("Assassin",    Faction::Human,  UnitClass::Assassin,    4,  65, 1, 85,  2, false),
+            spawn_unit("Longbowman",  Faction::Human,  UnitClass::Longbowman,  2,  75, 3, 50,  5, false),
+            spawn_unit("Mage",        Faction::Human,  UnitClass::Mage,        2,  55, 2, 80,  1, false),
+            spawn_unit("Priest",      Faction::Human,  UnitClass::Priest,      2,  95, 2, 35,  9, true),
 
             // Undead
-            spawn_unit("Wraith",      Faction::Undead, UnitClass::Wraith,      3,  90, 1, 50,  8),
-            spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 2, 200, 1, 65, 14),
-            spawn_unit("Banshee",     Faction::Undead, UnitClass::Banshee,     2,  60, 2, 78,  2),
-            spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       4,  85, 1, 60,  5),
-            spawn_unit("Skeleton",    Faction::Undead, UnitClass::Skeleton,    2,  80, 1, 50,  6),
-            spawn_unit("Necromancer", Faction::Undead, UnitClass::Necromancer, 2,  60, 2, 75,  2),
+            spawn_unit("Wraith",      Faction::Undead, UnitClass::Wraith,      3,  90, 1, 50,  8, false),
+            spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 2, 200, 1, 65, 14, false),
+            spawn_unit("Banshee",     Faction::Undead, UnitClass::Banshee,     2,  60, 2, 78,  2, false),
+            spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       4,  85, 1, 60,  5, false),
+            spawn_unit("Skeleton",    Faction::Undead, UnitClass::Skeleton,    2,  80, 1, 50,  6, false),
+            spawn_unit("Necromancer", Faction::Undead, UnitClass::Necromancer, 2,  60, 2, 75,  2, true),
         ];
 
         let river_x = 11;
@@ -366,10 +368,15 @@ fn main() {
             .filter(|u| u.faction == player_faction.opposite())
             .cloned()
             .collect();
+        let ally_snapshot: Vec<Unit> = units
+            .iter()
+            .filter(|u| u.faction == player_faction)
+            .cloned()
+            .collect();
         let all_units_finished = units
             .iter()
             .filter(|u| u.faction == player_faction && u.is_alive())
-            .all(|u| u.has_finished_turn(&enemy_snapshot));
+            .all(|u| u.has_finished_turn(&enemy_snapshot, &ally_snapshot));
 
         if player_can_act && (end_turn_clicked || all_units_finished) {
             current_turn = game_mode::TurnPhase::EnemyTurn;
@@ -419,11 +426,12 @@ fn main() {
 
         // combat -----------------------------------------------------------
         if game_mode == game_mode::GameMode::GridScreen && active_combat.is_none() {
-            if let Some(attacker_idx) = units.iter().position(|u| u.state == UnitState::Attacking) {
-                // le défenseur, c'est celui que l'attaquant a retenu comme cible au moment
-                // du clic (ou du choix de l'IA) — pas un ennemi quelconque trouvé après coup
-                if let Some(defender_idx) = units[attacker_idx].attack_target {
-                    active_combat = Some((attacker_idx, defender_idx));
+            if let Some(attacker_idx) = units
+                .iter()
+                .position(|u| u.state == UnitState::Attacking || u.state == UnitState::Healing)
+            {
+                if let Some(action) = units[attacker_idx].pending_action {
+                    active_combat = Some((attacker_idx, action.target_idx()));
                 }
             }
         }
@@ -449,17 +457,26 @@ fn main() {
                 (left_x, right_x)
             };
 
+            let is_heal = matches!(
+                units[attacker_idx].pending_action,
+                Some(PendingAction::Heal(_))
+            );
             let attacker_class = units[attacker_idx].class;
             let defender_class = units[defender_idx].class;
             let (attacker, defender) = two_mut(&mut units, attacker_idx, defender_idx);
 
             {
-                let attacker_set = assets.animation_set_mut(attacker_class);
+                let (cast_anim, cast_effect) = if is_heal {
+                    assets.heal_animation_mut(attacker_class)
+                } else {
+                    let set = assets.animation_set_mut(attacker_class);
+                    (&mut set.attack, &mut set.attack_effect)
+                };
                 combat::start_attack_if_needed(
                     attacker,
                     defender,
-                    &mut attacker_set.attack,
-                    &mut attacker_set.attack_effect,
+                    cast_anim,
+                    cast_effect,
                     &mut attack_animation_started,
                     &mut game_mode,
                     &mut attacker_combat_x,
@@ -484,7 +501,12 @@ fn main() {
                 delta_time,
             );
             {
-                let attacker_set = assets.animation_set_mut(attacker_class);
+                let (cast_anim, _) = if is_heal {
+                    assets.heal_animation_mut(attacker_class)
+                } else {
+                    let set = assets.animation_set_mut(attacker_class);
+                    (&mut set.attack, &mut set.attack_effect)
+                };
                 if let Some(result) = minigame::handle_minigame(
                     attacker,
                     defender,
@@ -493,21 +515,32 @@ fn main() {
                     &mut damage_multiplier,
                     &rl,
                     delta_time,
-                    &mut attacker_set.attack,
+                    cast_anim,
                 ) {
                     result_display = Some((result, 1.0, damage_multiplier));
                 }
             }
-            let attacker_attack_finished = assets.animation_set_mut(attacker_class).attack.finished;
-            let defender_hurt = &mut assets.animation_set_mut(defender_class).hurt;
-            combat::resolve_attack(
-                attacker,
-                defender,
-                attacker_attack_finished,
-                defender_hurt,
-                &mut attack_animation_started,
-                damage_multiplier,
-            );
+            if is_heal {
+                let cast_finished = assets.heal_animation_mut(attacker_class).0.finished;
+                combat::resolve_heal(
+                    attacker,
+                    defender,
+                    cast_finished,
+                    &mut attack_animation_started,
+                    damage_multiplier,
+                );
+            } else {
+                let cast_finished = assets.animation_set_mut(attacker_class).attack.finished;
+                let defender_hurt = &mut assets.animation_set_mut(defender_class).hurt;
+                combat::resolve_attack(
+                    attacker,
+                    defender,
+                    cast_finished,
+                    defender_hurt,
+                    &mut attack_animation_started,
+                    damage_multiplier,
+                );
+            }
             {
                 let defender_set = assets.animation_set_mut(defender_class);
                 combat::update_hurt_state(defender, &defender_set.hurt, &mut defender_set.die);
@@ -618,39 +651,59 @@ fn main() {
             }
         }
 
+        fn reachable_targets(
+            units: &[Unit],
+            move_range: &Vec<(i32, i32)>,
+            sel: usize,
+            wants: impl Fn(&Unit, &Unit) -> bool,
+        ) -> (Vec<(i32, i32)>, Vec<(i32, i32)>) {
+            let attacker_range = units[sel].attack_range;
+            let mut positions = Vec::new();
+            let mut target_tiles = Vec::new();
+            for target in units.iter().filter(|u| wants(&units[sel], u)) {
+                let reachable = MovementRange::compute_attackable_positions(
+                    move_range,
+                    target.grid_x,
+                    target.grid_y,
+                    attacker_range,
+                    target,
+                );
+                if !reachable.is_empty() {
+                    target_tiles.push((target.grid_x, target.grid_y));
+                    for pos in reachable {
+                        if !positions.contains(&pos) {
+                            positions.push(pos);
+                        }
+                    }
+                }
+            }
+            (positions, target_tiles)
+        }
+
         let (valid_attack_positions, attackable_enemy_positions): (
             Vec<(i32, i32)>,
             Vec<(i32, i32)>,
         ) = match selected_unit {
             Some(sel) if !units[sel].has_attacked => {
-                let attacker_faction = units[sel].faction;
-                let attacker_range = units[sel].attack_range;
-                let mut positions = Vec::new();
-                let mut enemy_tiles = Vec::new();
-                for enemy in units
-                    .iter()
-                    .filter(|u| u.faction != attacker_faction && u.is_alive())
-                {
-                    let reachable = MovementRange::compute_attackable_positions(
-                        &move_range,
-                        enemy.grid_x,
-                        enemy.grid_y,
-                        attacker_range,
-                        enemy,
-                    );
-                    if !reachable.is_empty() {
-                        enemy_tiles.push((enemy.grid_x, enemy.grid_y));
-                        for pos in reachable {
-                            if !positions.contains(&pos) {
-                                positions.push(pos);
-                            }
-                        }
-                    }
-                }
-                (positions, enemy_tiles)
+                reachable_targets(&units, &move_range, sel, |me, u| {
+                    u.faction != me.faction && u.is_alive()
+                })
             }
             _ => (Vec::new(), Vec::new()),
         };
+
+        let (valid_heal_positions, healable_ally_positions): (Vec<(i32, i32)>, Vec<(i32, i32)>) =
+            match selected_unit {
+                Some(sel) if !units[sel].has_attacked && units[sel].can_heal => {
+                    reachable_targets(&units, &move_range, sel, |me, u| {
+                        u.faction == me.faction
+                            && u.is_alive()
+                            && u.hp_points < u.hp_max_points
+                            && (u.grid_x, u.grid_y) != (me.grid_x, me.grid_y)
+                    })
+                }
+                _ => (Vec::new(), Vec::new()),
+            };
 
         // if pour attaquer l'ennemi et bouger le personnage sélectionné si il y a qu'une
         // seule case possible pour attaquer
@@ -663,14 +716,14 @@ fn main() {
                     && u.grid_y == cursor_grid_y
             }) {
                 let (mover, enemy) = two_mut(&mut units, sel, enemy_idx);
-                if input::handle_movement_attack_click(
+                if input::handle_movement_action_click(
                     &rl,
                     mover,
                     &came_from,
                     &valid_attack_positions,
                     !valid_attack_positions.is_empty(),
                     enemy,
-                    enemy_idx,
+                    PendingAction::Attack(enemy_idx),
                     cursor_grid_x,
                     cursor_grid_y,
                 ) {
@@ -681,13 +734,47 @@ fn main() {
             }
         }
 
-        // if pour bouger le personnage vers la case choisie pour attaquer l'ennemi
+        // pareil, mais pour soigner un allié blessé (Priest / Necromancer)
+        if let Some(sel) = selected_unit {
+            if units[sel].can_heal {
+                let healer_faction = units[sel].faction;
+                if let Some(ally_idx) = units.iter().position(|u| {
+                    u.faction == healer_faction
+                        && u.is_alive()
+                        && u.hp_points < u.hp_max_points
+                        && u.grid_x == cursor_grid_x
+                        && u.grid_y == cursor_grid_y
+                }) {
+                    let (mover, ally) = two_mut(&mut units, sel, ally_idx);
+                    if input::handle_movement_action_click(
+                        &rl,
+                        mover,
+                        &came_from,
+                        &valid_heal_positions,
+                        !valid_heal_positions.is_empty(),
+                        ally,
+                        PendingAction::Heal(ally_idx),
+                        cursor_grid_x,
+                        cursor_grid_y,
+                    ) && mover.state != UnitState::ChoosingPosition
+                    {
+                        selected_unit = None;
+                    }
+                }
+            }
+        }
+
+        let choosing_positions = match selected_unit.and_then(|sel| units[sel].pending_action) {
+            Some(PendingAction::Heal(_)) => &valid_heal_positions,
+            _ => &valid_attack_positions,
+        };
+
         if let Some(sel) = selected_unit {
             if input::handle_movement_choosing_position_click(
                 &rl,
                 &mut units[sel],
                 &came_from,
-                &valid_attack_positions,
+                choosing_positions,
                 cursor_grid_x,
                 cursor_grid_y,
             ) {
@@ -755,8 +842,9 @@ fn main() {
                 &current_turn,
                 wait_button_visible,
                 &move_range,
-                &valid_attack_positions,
+                choosing_positions,
                 &attackable_enemy_positions,
+                &healable_ally_positions,
                 cursor_grid_x,
                 cursor_grid_y,
                 cursor.cursor_type,

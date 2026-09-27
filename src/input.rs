@@ -1,5 +1,5 @@
 use crate::movement::MovementRange;
-use crate::unit::{Unit, UnitState};
+use crate::unit::{PendingAction, Unit, UnitState};
 use raylib::consts::KeyboardKey::*;
 use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
@@ -28,7 +28,7 @@ pub fn handle_movement_normal_click(
                 (cursor_grid_x, cursor_grid_y),
             );
             unit.state = UnitState::Walking;
-            unit.attack_target = None;
+            unit.pending_action = None;
             unit.path = waypoints;
             return true;
         }
@@ -37,42 +37,40 @@ pub fn handle_movement_normal_click(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn handle_movement_attack_click(
+pub fn handle_movement_action_click(
     rl: &RaylibHandle,
     unit: &mut Unit,
     came_from: &HashMap<(i32, i32), (i32, i32)>,
-    valid_attack_positions: &Vec<(i32, i32)>,
-    enemy_attackable: bool,
-    enemy: &Unit,
-    enemy_idx: usize,
+    valid_positions: &Vec<(i32, i32)>,
+    target_reachable: bool,
+    target: &Unit,
+    action: PendingAction,
     cursor_grid_x: i32,
     cursor_grid_y: i32,
 ) -> bool {
     if rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
         && unit.state == UnitState::Idle
-        && enemy_attackable
-        && cursor_grid_x == enemy.grid_x
-        && cursor_grid_y == enemy.grid_y
+        && target_reachable
+        && cursor_grid_x == target.grid_x
+        && cursor_grid_y == target.grid_y
     {
-        // on retient l'ennemi cliqué maintenant : peu importe combien de cases il faut
-        // parcourir ou combien d'autres unités traînent autour, c'est lui qu'on ira frapper
-        unit.attack_target = Some(enemy_idx);
+        unit.pending_action = Some(action);
 
         let current_distance =
-            (enemy.grid_x - unit.grid_x).abs() + (enemy.grid_y - unit.grid_y).abs();
+            (target.grid_x - unit.grid_x).abs() + (target.grid_y - unit.grid_y).abs();
         if current_distance <= unit.attack_range {
-            unit.state = UnitState::Attacking;
-        } else if valid_attack_positions.len() == 1 {
+            unit.state = match action {
+                PendingAction::Attack(_) => UnitState::Attacking,
+                PendingAction::Heal(_) => UnitState::Healing,
+            };
+        } else if valid_positions.len() == 1 {
             let waypoints = MovementRange::build_waypoints(
                 came_from,
                 (unit.grid_x, unit.grid_y),
-                valid_attack_positions[0],
+                valid_positions[0],
             );
-            unit.move_points_remaining -= MovementRange::path_cost(
-                came_from,
-                (unit.grid_x, unit.grid_y),
-                valid_attack_positions[0],
-            );
+            unit.move_points_remaining -=
+                MovementRange::path_cost(came_from, (unit.grid_x, unit.grid_y), valid_positions[0]);
             unit.state = UnitState::Walking;
             unit.path = waypoints;
         } else {
@@ -105,7 +103,7 @@ pub fn handle_movement_choosing_position_click(
             (unit.grid_x, unit.grid_y),
             (cursor_grid_x, cursor_grid_y),
         );
-        // attack_target déjà posé par handle_movement_attack_click quand la ChoosingPosition
+        // pending_action déjà posé par handle_movement_action_click quand la ChoosingPosition
         // a commencé, on y touche pas ici
         unit.state = UnitState::Walking;
         unit.path = waypoints;

@@ -110,7 +110,10 @@ pub fn handle_minigame(
 
     if let Some(result) = bar.result {
         *damage_multiplier = result.to_multiplier(player_is_attacker);
-        attacker.state = UnitState::Attacking;
+        attacker.state = match attacker.pending_action {
+            Some(crate::unit::PendingAction::Heal(_)) => UnitState::Healing,
+            _ => UnitState::Attacking,
+        };
         attacker_attack_animation.current = 0;
         attacker_attack_animation.finished = false;
         *timing_bar = None;

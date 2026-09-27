@@ -80,7 +80,11 @@ pub fn draw_title_screen(
         hud.btn_settings_title_screen,
     );
     draw_texture_at(d, &assets.btn_exit_title_screen, hud.btn_exit_title_screen);
-    draw_texture_at(d, &assets.btn_guide_title_screen, hud.btn_learn_title_screen);
+    draw_texture_at(
+        d,
+        &assets.btn_guide_title_screen,
+        hud.btn_learn_title_screen,
+    );
 
     d.draw_texture_ex(
         assets.cursor_texture(CursorType::Normal),
@@ -116,7 +120,14 @@ pub fn draw_pause_screen(
         1.0,
         Color::new(0, 0, 0, 160),
     );
-    d.draw_text_ex(&assets.hud_font, title, title_pos, title_size, 1.0, Color::WHITE);
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos,
+        title_size,
+        1.0,
+        Color::WHITE,
+    );
 
     for (texture, rect) in [
         (&assets.btn_play, hud.btn_pause_play),
@@ -159,7 +170,14 @@ pub fn draw_guide_screen(
         1.0,
         Color::new(0, 0, 0, 160),
     );
-    d.draw_text_ex(&assets.hud_font, title, title_pos, title_size, 1.0, Color::WHITE);
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos,
+        title_size,
+        1.0,
+        Color::WHITE,
+    );
 
     // panneau semi-transparent pour rester lisible sur le fond
     let panel = Rectangle {
@@ -196,10 +214,17 @@ pub fn draw_guide_screen(
     // un perso de chaque camp qui vit un peu la scène, en idle
     let sprite_size = 220.0;
     let sprite_top = SCREEN_HEIGHT as f32 - sprite_size - 20.0;
-    draw_idle_card(d, &mut assets.soldier.idle, 110.0, sprite_top, sprite_size, delta_time);
     draw_idle_card(
         d,
-        &mut assets.wraith.idle,
+        &mut assets.cavalry.idle,
+        110.0,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        &mut assets.necromancer.idle,
         SCREEN_WIDTH as f32 - 110.0,
         sprite_top,
         sprite_size,
@@ -467,6 +492,7 @@ pub fn draw_grid_screen(
     move_range: &[(i32, i32)],
     valid_attack_positions: &[(i32, i32)],
     attackable_enemy_positions: &[(i32, i32)],
+    healable_ally_positions: &[(i32, i32)],
     cursor_grid_x: i32,
     cursor_grid_y: i32,
     cursor_type: CursorType,
@@ -528,6 +554,16 @@ pub fn draw_grid_screen(
         );
     }
 
+    for (x, y) in healable_ally_positions {
+        d.draw_rectangle(
+            x * TILE_SIZE,
+            y * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE,
+            Color::new(0, 220, 0, 160), // vert transparent
+        );
+    }
+
     if move_range.contains(&(cursor_grid_x, cursor_grid_y)) {
         d.draw_texture_ex(
             &assets.mouse_select_texture,
@@ -543,7 +579,9 @@ pub fn draw_grid_screen(
 
     for unit in units {
         if unit.is_alive() {
-            let animation = assets.animation_set_mut(unit.class).for_state_mut(unit.state);
+            let animation = assets
+                .animation_set_mut(unit.class)
+                .for_state_mut(unit.state);
             draw_unit_sprite(
                 d,
                 animation,
@@ -617,9 +655,11 @@ pub fn draw_combat_screen(
     let combat_y = SCREEN_HEIGHT as f32 / 2.0 - sprite_size / 2.0;
 
     if attacker.is_alive() {
-        let animation = assets
-            .animation_set_mut(attacker.class)
-            .for_state_mut(attacker.state);
+        let animation = if attacker.state == UnitState::Healing {
+            assets.heal_animation_mut(attacker.class).0
+        } else {
+            assets.animation_set_mut(attacker.class).for_state_mut(attacker.state)
+        };
         draw_unit_sprite(
             d,
             animation,
@@ -644,9 +684,20 @@ pub fn draw_combat_screen(
             delta_time,
         );
     }
-    // les effets d'attaque se dessinent après les deux sprites pour rester au premier plan
+    // les effets d'attaque/soin se dessinent après les deux sprites pour rester au premier plan
     if attacker.state == UnitState::Attacking {
         let effect = &mut assets.animation_set_mut(attacker.class).attack_effect;
+        draw_unit_sprite(
+            d,
+            effect,
+            attacker,
+            attacker_combat_x,
+            combat_y,
+            sprite_size,
+            delta_time,
+        );
+    } else if attacker.state == UnitState::Healing {
+        let effect = assets.heal_animation_mut(attacker.class).1;
         draw_unit_sprite(
             d,
             effect,

@@ -18,6 +18,7 @@ impl AnimationSet {
             UnitState::Idle => &mut self.idle,
             UnitState::Walking => &mut self.walk,
             UnitState::Attacking => &mut self.attack,
+            UnitState::Healing => &mut self.attack,
             UnitState::ChoosingPosition => &mut self.idle,
             UnitState::CombatEntering => &mut self.walk,
             UnitState::Hurt => &mut self.hurt,
@@ -102,6 +103,17 @@ impl Assets {
             UnitClass::Ghoul => &mut self.ghoul,
             UnitClass::Skeleton => &mut self.skeleton,
             UnitClass::Necromancer => &mut self.necromancer,
+        }
+    }
+
+    pub fn heal_animation_mut(&mut self, class: UnitClass) -> (&mut Animation, &mut Animation) {
+        match class {
+            UnitClass::Priest => (&mut self.priest_heal, &mut self.priest_heal_effect),
+            UnitClass::Necromancer => (
+                &mut self.necromancer_attack2,
+                &mut self.necromancer_attack2_effect,
+            ),
+            _ => unreachable!("{class:?} ne peut pas soigner"),
         }
     }
 }

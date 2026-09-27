@@ -38,10 +38,25 @@ pub enum UnitState {
     ChoosingPosition,
     CombatEntering,
     Attacking,
+    Healing,
     Hurt,
     Dying,
     Dead,
     MiniGame,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum PendingAction {
+    Attack(usize),
+    Heal(usize),
+}
+
+impl PendingAction {
+    pub fn target_idx(self) -> usize {
+        match self {
+            PendingAction::Attack(idx) | PendingAction::Heal(idx) => idx,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -64,8 +79,8 @@ pub struct Unit {
     pub attack_range: i32,
     pub attack_power: i32,
     pub defense: i32,
-    /// index dans `units` de l'ennemi visé par une attaque en cours (déplacement puis frappe)
-    pub attack_target: Option<usize>,
+    pub can_heal: bool,
+    pub pending_action: Option<PendingAction>,
 }
 
 impl Unit {
@@ -105,11 +120,11 @@ impl Unit {
         {
             self.path.remove(0);
             if self.path.is_empty() {
-                if self.attack_target.is_some() {
-                    self.state = UnitState::Attacking;
-                } else {
-                    self.state = UnitState::Idle;
-                }
+                self.state = match self.pending_action {
+                    Some(PendingAction::Attack(_)) => UnitState::Attacking,
+                    Some(PendingAction::Heal(_)) => UnitState::Healing,
+                    None => UnitState::Idle,
+                };
             }
             return;
         }
@@ -133,6 +148,7 @@ impl Unit {
             UnitState::Walking
                 | UnitState::CombatEntering
                 | UnitState::Attacking
+                | UnitState::Healing
                 | UnitState::MiniGame
                 | UnitState::Hurt
                 | UnitState::Dying
@@ -166,10 +182,23 @@ impl Unit {
         })
     }
 
-    pub fn has_finished_turn(&self, enemies: &[Unit]) -> bool {
+    pub fn can_heal_any(&self, allies: &[Unit]) -> bool {
+        self.can_heal
+            && allies.iter().any(|ally| {
+                let distance =
+                    (ally.grid_x - self.grid_x).abs() + (ally.grid_y - self.grid_y).abs();
+                ally.is_alive()
+                    && ally.hp_points < ally.hp_max_points
+                    && distance <= self.attack_range
+                    && (ally.grid_x, ally.grid_y) != (self.grid_x, self.grid_y)
+            })
+    }
+
+    pub fn has_finished_turn(&self, enemies: &[Unit], allies: &[Unit]) -> bool {
         !self.is_alive()
             || (self.move_points_remaining == 0
-                && (self.has_attacked || !self.can_attack_any(enemies)))
+                && (self.has_attacked
+                    || (!self.can_attack_any(enemies) && !self.can_heal_any(allies))))
     }
 }
 

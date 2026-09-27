@@ -21,7 +21,8 @@ pub fn start_attack_if_needed(
     attacker_combat_x: &mut f32,
     defender_combat_x: &mut f32,
 ) {
-    if attacker.state == UnitState::Attacking && !*attack_animation_started {
+    let is_acting = attacker.state == UnitState::Attacking || attacker.state == UnitState::Healing;
+    if is_acting && !*attack_animation_started {
         attacker.state = UnitState::CombatEntering;
         defender.state = UnitState::CombatEntering;
 
@@ -115,8 +116,27 @@ pub fn resolve_attack(
         defender.state = UnitState::Hurt;
 
         attacker.state = UnitState::Idle;
-        attacker.attack_target = None;
+        attacker.pending_action = None;
         attacker.has_attacked = true;
+        *attack_animation_started = false;
+    }
+}
+
+pub fn resolve_heal(
+    healer: &mut Unit,
+    target: &mut Unit,
+    heal_finished: bool,
+    attack_animation_started: &mut bool,
+    heal_multiplier: f32,
+) {
+    if healer.state == UnitState::Healing && heal_finished {
+        let heal_amount = (healer.attack_power as f32 * heal_multiplier) as i32;
+        target.hp_points = (target.hp_points + heal_amount).min(target.hp_max_points);
+        target.state = UnitState::Idle;
+
+        healer.state = UnitState::Idle;
+        healer.pending_action = None;
+        healer.has_attacked = true;
         *attack_animation_started = false;
     }
 }

@@ -1,5 +1,5 @@
 use crate::movement::MovementRange;
-use crate::unit::{Unit, UnitState};
+use crate::unit::{PendingAction, Unit, UnitState};
 use crate::{GRID_COLS, GRID_ROWS};
 
 pub fn ai_move_toward_target(
@@ -40,7 +40,8 @@ pub fn ai_move_toward_target(
         // attaque automatique à l'arrivée si la case d'arrivée est à portée
         let distance_at_arrival =
             (destination.0 - target.grid_x).abs() + (destination.1 - target.grid_y).abs();
-        unit.attack_target = (distance_at_arrival <= unit.attack_range).then_some(target_idx);
+        unit.pending_action = (distance_at_arrival <= unit.attack_range)
+            .then_some(PendingAction::Attack(target_idx));
 
         unit.path = path;
         unit.state = UnitState::Walking;
@@ -68,7 +69,7 @@ pub fn ai_attack_if_in_range(attacker: &mut Unit, defender: &Unit, defender_idx:
 
     if distance <= attacker.attack_range {
         attacker.state = UnitState::Attacking;
-        attacker.attack_target = Some(defender_idx);
+        attacker.pending_action = Some(PendingAction::Attack(defender_idx));
     }
 }
 
