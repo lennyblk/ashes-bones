@@ -1,4 +1,3 @@
-use raylib::consts::MouseButton::*;
 use raylib::prelude::*;
 use std::collections::HashMap;
 mod ai;
@@ -13,13 +12,14 @@ mod map;
 mod minigame;
 mod movement;
 mod render;
+mod screens;
 mod ui;
 mod unit;
 
 use cursor::{CursorType, Cursors};
 use game::Game;
 use movement::MovementRange;
-use unit::{Faction, PendingAction, Unit, UnitState, two_mut};
+use unit::{PendingAction, Unit, UnitState, two_mut};
 
 const TILE_SIZE: i32 = 48;
 const GRID_COLS: i32 = 25;
@@ -82,97 +82,20 @@ fn main() {
 
         let mut click_consumed = false;
 
-        // Échap : pause pendant une partie, ou retour depuis pause/guide
-        if input::pause_pressed(&rl) {
-            match game.game_mode {
-                game_mode::GameMode::GridScreen | game_mode::GameMode::CombatScreen => {
-                    game.paused_from = game.game_mode;
-                    game.game_mode = game_mode::GameMode::PauseScreen;
-                }
-                game_mode::GameMode::PauseScreen => game.game_mode = game.paused_from,
-                game_mode::GameMode::GuideScreen => game.game_mode = game.guide_return_to,
-                _ => {}
-            }
-        }
+        screens::pause::handle_escape(&mut game, &rl);
 
-        // title screen : play / settings / learn / exit -----------------------
-        if game.game_mode == game_mode::GameMode::TitleScreen {
-            let clicked = mouse_is_clicked(&rl);
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_exit_title_screen) {
-                break;
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_settings_title_screen) {
-                // TODO: écran settings
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_learn_title_screen) {
-                game.guide_return_to = game_mode::GameMode::TitleScreen;
-                game.game_mode = game_mode::GameMode::GuideScreen;
-                click_consumed = true;
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_play_title_screen) {
-                game.game_mode = game_mode::GameMode::FactionSelectionScreen;
-                click_consumed = true;
-            }
+        // écrans de menu, dans le même ordre qu'avant : un clic peut changer d'écran
+        // et l'écran suivant le voit dans la même frame (d'où click_consumed)
+        if screens::title::update(&mut game, &rl, &hud, mouse_position, &mut click_consumed) {
+            break;
         }
-
-        // menu pause : play / guide / settings / back / exit -------------------
-        if game.game_mode == game_mode::GameMode::PauseScreen {
-            let clicked = mouse_is_clicked(&rl);
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_exit) {
-                break;
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_settings) {
-                // TODO: écran settings
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_guide) {
-                game.guide_return_to = game_mode::GameMode::PauseScreen;
-                game.game_mode = game_mode::GameMode::GuideScreen;
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_play) {
-                game.game_mode = game.paused_from;
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_back) {
-                game.reset(&rl, game_mode::GameMode::TitleScreen);
-            }
+        if screens::pause::update(&mut game, &rl, &hud, mouse_position) {
+            break;
         }
-
-        // guide : bouton back (Échap marche aussi, voir plus haut) --------------
-        if game.game_mode == game_mode::GameMode::GuideScreen
-            && input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_guide_back)
-        {
-            game.game_mode = game.guide_return_to;
-        }
-
-        // Faction selection screen : Human / Undead --------------------------------
-        if game.game_mode == game_mode::GameMode::FactionSelectionScreen {
-            if input::cancel_pressed(&rl) {
-                game.game_mode = game_mode::GameMode::TitleScreen;
-            } else if !click_consumed && mouse_is_clicked(&rl) {
-                game.player_faction = if mouse_position.x < SCREEN_WIDTH as f32 / 2.0 {
-                    Faction::Human
-                } else {
-                    Faction::Undead
-                };
-                game.game_mode = game_mode::GameMode::GridScreen;
-            }
-        }
-
-        // écran de fin : retry / back / exit --------------------------------
-        let game_over = game.game_mode == game_mode::GameMode::Victory
-            || game.game_mode == game_mode::GameMode::Defeat;
-        if game_over {
-            let clicked = mouse_is_clicked(&rl);
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_exit) {
-                break;
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_back) {
-                game.reset(&rl, game_mode::GameMode::TitleScreen);
-                click_consumed = true;
-            }
-            if input::is_button_clicked(mouse_position, clicked, hud.btn_retry) {
-                game.reset(&rl, game_mode::GameMode::GridScreen);
-                click_consumed = true;
-            }
+        screens::guide::update(&mut game, &rl, &hud, mouse_position);
+        screens::faction_selection::update(&mut game, &rl, mouse_position, click_consumed);
+        if screens::game_over::update(&mut game, &rl, &hud, mouse_position, &mut click_consumed) {
+            break;
         }
         let player_units_busy = game
             .units
@@ -186,7 +109,7 @@ fn main() {
         let wait_button_visible =
             player_can_act && game.selected_unit.is_some_and(|i| game.units[i].can_wait());
         if wait_button_visible
-            && input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_wait)
+            && input::is_button_clicked(mouse_position, input::mouse_is_clicked(&rl), hud.btn_wait)
         {
             if let Some(sel) = game.selected_unit {
                 game.units[sel].wait();
@@ -196,8 +119,11 @@ fn main() {
         }
 
         // fin de tour : bouton end turn, ou auto quand tous les persos ont fini
-        let end_turn_clicked =
-            input::is_button_clicked(mouse_position, mouse_is_clicked(&rl), hud.btn_end_turn);
+        let end_turn_clicked = input::is_button_clicked(
+            mouse_position,
+            input::mouse_is_clicked(&rl),
+            hud.btn_end_turn,
+        );
 
         let enemy_snapshot: Vec<Unit> = game
             .units
@@ -483,7 +409,7 @@ fn main() {
         let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
         let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
 
-        let clicked = mouse_is_clicked(&rl);
+        let clicked = input::mouse_is_clicked(&rl);
 
         // sélection / désélection d'une unité du joueur au clic sur sa case
         if game.game_mode == game_mode::GameMode::GridScreen && clicked && !click_consumed {
@@ -696,10 +622,6 @@ fn main() {
             );
         }
     }
-}
-
-fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
-    rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 }
 
 fn reachable_targets(

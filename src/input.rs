@@ -109,6 +109,10 @@ pub fn handle_movement_choosing_position_click(
     false
 }
 
+pub fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
+    rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+}
+
 pub fn cancel_pressed(rl: &RaylibHandle) -> bool {
     rl.is_key_pressed(KEY_B)
 }
