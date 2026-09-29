@@ -2,10 +2,13 @@ use crate::movement::MovementRange;
 use crate::unit::{PendingAction, Unit, UnitState};
 use crate::{GRID_COLS, GRID_ROWS};
 
+/// sous ce ratio de PV, un allié est considéré comme à soigner
+const AI_HEAL_THRESHOLD: f32 = 0.5;
+
 pub fn ai_move_toward_target(
     unit: &mut Unit,
     target: &Unit,
-    target_idx: usize,
+    action: PendingAction,
     obstacles: &[Unit],
     blocked_tiles: &Vec<(i32, i32)>,
 ) {
@@ -37,11 +40,10 @@ pub fn ai_move_toward_target(
             return; // déjà sur la meilleure case, rien à faire
         }
 
-        // attaque automatique à l'arrivée si la case d'arrivée est à portée
+        // attaque/soin automatique à l'arrivée si la case d'arrivée est à portée
         let distance_at_arrival =
             (destination.0 - target.grid_x).abs() + (destination.1 - target.grid_y).abs();
-        unit.pending_action = (distance_at_arrival <= unit.attack_range)
-            .then_some(PendingAction::Attack(target_idx));
+        unit.pending_action = (distance_at_arrival <= unit.attack_range).then_some(action);
 
         unit.path = path;
         unit.state = UnitState::Walking;
@@ -59,31 +61,71 @@ pub fn find_closest_target<'a>(
         .min_by_key(|(_, c)| (c.grid_x - unit.grid_x).abs() + (c.grid_y - unit.grid_y).abs())
 }
 
-pub fn ai_attack_if_in_range(attacker: &mut Unit, defender: &Unit, defender_idx: usize) {
-    if !attacker.path.is_empty() || attacker.state != UnitState::Idle {
+/// parmi les alliés blessés, prend celui avec le ratio de PV le plus bas (sous le seuil)
+pub fn find_ally_to_heal(wounded_allies: &[(usize, Unit)]) -> Option<&(usize, Unit)> {
+    let hp_ratio = |u: &Unit| u.hp_points as f32 / u.hp_max_points as f32;
+    wounded_allies
+        .iter()
+        .filter(|(_, a)| a.is_alive() && hp_ratio(a) < AI_HEAL_THRESHOLD)
+        .min_by(|(_, a), (_, b)| hp_ratio(a).total_cmp(&hp_ratio(b)))
+}
+
+pub fn ai_act_if_in_range(unit: &mut Unit, target: &Unit, action: PendingAction) {
+    if !unit.path.is_empty() || unit.state != UnitState::Idle {
         return; // encore en train de bouger, ou déjà en train de faire autre chose
     }
 
-    let distance =
-        (defender.grid_x - attacker.grid_x).abs() + (defender.grid_y - attacker.grid_y).abs();
+    let distance = (target.grid_x - unit.grid_x).abs() + (target.grid_y - unit.grid_y).abs();
 
-    if distance <= attacker.attack_range {
-        attacker.state = UnitState::Attacking;
-        attacker.pending_action = Some(PendingAction::Attack(defender_idx));
+    if distance <= unit.attack_range {
+        unit.state = action.to_state();
+        unit.pending_action = Some(action);
     }
 }
 
+/// ordre de priorité : soigner à portée > attaquer à portée > marcher vers un blessé > marcher vers un ennemi
 pub fn take_turn(
     unit: &mut Unit,
     targets: &[(usize, Unit)],
+    wounded_allies: &[(usize, Unit)],
     obstacles: &[Unit],
     blocked_tiles: &Vec<(i32, i32)>,
 ) {
     unit.start_turn();
-    if let Some((target_idx, target)) = find_closest_target(unit, targets) {
-        ai_attack_if_in_range(unit, target, *target_idx);
-        if unit.state != UnitState::Attacking {
-            ai_move_toward_target(unit, target, *target_idx, obstacles, blocked_tiles);
+
+    let enemy = find_closest_target(unit, targets);
+    let ally = if unit.can_heal {
+        find_ally_to_heal(wounded_allies)
+    } else {
+        None
+    };
+
+    if let Some((ally_idx, ally)) = ally {
+        ai_act_if_in_range(unit, ally, PendingAction::Heal(*ally_idx));
+    }
+    if let Some((enemy_idx, enemy)) = enemy {
+        ai_act_if_in_range(unit, enemy, PendingAction::Attack(*enemy_idx));
+    }
+    if unit.state == UnitState::Idle {
+        if let Some((ally_idx, ally)) = ally {
+            ai_move_toward_target(
+                unit,
+                ally,
+                PendingAction::Heal(*ally_idx),
+                obstacles,
+                blocked_tiles,
+            );
+        }
+    }
+    if unit.state == UnitState::Idle {
+        if let Some((enemy_idx, enemy)) = enemy {
+            ai_move_toward_target(
+                unit,
+                enemy,
+                PendingAction::Attack(*enemy_idx),
+                obstacles,
+                blocked_tiles,
+            );
         }
     }
 }

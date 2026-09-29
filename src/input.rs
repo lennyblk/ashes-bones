@@ -59,10 +59,7 @@ pub fn handle_movement_action_click(
         let current_distance =
             (target.grid_x - unit.grid_x).abs() + (target.grid_y - unit.grid_y).abs();
         if current_distance <= unit.attack_range {
-            unit.state = match action {
-                PendingAction::Attack(_) => UnitState::Attacking,
-                PendingAction::Heal(_) => UnitState::Healing,
-            };
+            unit.state = action.to_state();
         } else if valid_positions.len() == 1 {
             let waypoints = MovementRange::build_waypoints(
                 came_from,

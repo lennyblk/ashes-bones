@@ -57,6 +57,13 @@ impl PendingAction {
             PendingAction::Attack(idx) | PendingAction::Heal(idx) => idx,
         }
     }
+
+    pub fn to_state(self) -> UnitState {
+        match self {
+            PendingAction::Attack(_) => UnitState::Attacking,
+            PendingAction::Heal(_) => UnitState::Healing,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -120,11 +127,9 @@ impl Unit {
         {
             self.path.remove(0);
             if self.path.is_empty() {
-                self.state = match self.pending_action {
-                    Some(PendingAction::Attack(_)) => UnitState::Attacking,
-                    Some(PendingAction::Heal(_)) => UnitState::Healing,
-                    None => UnitState::Idle,
-                };
+                self.state = self
+                    .pending_action
+                    .map_or(UnitState::Idle, PendingAction::to_state);
             }
             return;
         }

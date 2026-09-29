@@ -411,6 +411,19 @@ fn main() {
                         .filter(|(_, u)| u.faction == player_faction && u.is_alive())
                         .map(|(i, u)| (i, u.clone()))
                         .collect();
+                    // alliés blessés que l'unité pourrait soigner (pas elle-même)
+                    let ai_faction = units[idx].faction;
+                    let wounded_allies: Vec<(usize, Unit)> = units
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, u)| {
+                            *i != idx
+                                && u.faction == ai_faction
+                                && u.is_alive()
+                                && u.hp_points < u.hp_max_points
+                        })
+                        .map(|(i, u)| (i, u.clone()))
+                        .collect();
                     // toute autre unité vivante (alliée ou ennemie) bloque le passage
                     let obstacles: Vec<Unit> = units
                         .iter()
@@ -418,7 +431,13 @@ fn main() {
                         .filter(|(i, u)| *i != idx && u.is_alive())
                         .map(|(_, u)| u.clone())
                         .collect();
-                    ai::take_turn(&mut units[idx], &targets, &obstacles, &blocked_tiles);
+                    ai::take_turn(
+                        &mut units[idx],
+                        &targets,
+                        &wounded_allies,
+                        &obstacles,
+                        &blocked_tiles,
+                    );
                     ai_acting_unit = Some(idx);
                 }
             }
