@@ -1,6 +1,11 @@
+use raylib::prelude::*;
+
 use crate::animation::Animation;
+use crate::assets::Assets;
+use crate::game::Game;
 use crate::game_mode::GameMode;
-use crate::unit::{Unit, UnitState};
+use crate::minigame;
+use crate::unit::{PendingAction, Unit, UnitState, two_mut};
 use crate::{GRID_COLS, TILE_SIZE};
 
 const SCREEN_WIDTH: f32 = (GRID_COLS * TILE_SIZE) as f32;
@@ -183,5 +188,140 @@ pub fn combat_exit_pause_timer(
             *game_mode = GameMode::GridScreen;
             *combat_exit_pause_timer = 0.0;
         }
+    }
+}
+
+/// déclenche le combat quand une unité passe en Attacking/Healing, puis le fait avancer :
+/// entrée en scène, animation, minigame, dégâts/soin, hurt/dying, retour à la grille
+pub fn update(game: &mut Game, assets: &mut Assets, rl: &RaylibHandle, delta_time: f32) {
+    if game.game_mode == GameMode::GridScreen && game.active_combat.is_none() {
+        if let Some(attacker_idx) = game
+            .units
+            .iter()
+            .position(|u| u.state == UnitState::Attacking || u.state == UnitState::Healing)
+        {
+            if let Some(action) = game.units[attacker_idx].pending_action {
+                game.active_combat = Some((attacker_idx, action.target_idx()));
+            }
+        }
+    }
+
+    let sprite_size = 500.0;
+    let overlap = 185.0;
+    let center_x = SCREEN_WIDTH / 2.0;
+    let left_x = center_x - sprite_size + overlap;
+    let right_x = center_x - overlap;
+
+    // faire disparaître le message de résultat du minigame après un certain temps
+    if let Some((_, time_left, _)) = &mut game.result_display {
+        *time_left -= delta_time;
+        if *time_left <= 0.0 {
+            game.result_display = None;
+        }
+    }
+
+    if let Some((attacker_idx, defender_idx)) = game.active_combat {
+        let (attacker_target_x, defender_target_x) = if game.units[attacker_idx].facing_left {
+            (right_x, left_x)
+        } else {
+            (left_x, right_x)
+        };
+
+        let is_heal = matches!(
+            game.units[attacker_idx].pending_action,
+            Some(PendingAction::Heal(_))
+        );
+        let attacker_class = game.units[attacker_idx].class;
+        let defender_class = game.units[defender_idx].class;
+        let (attacker, defender) = two_mut(&mut game.units, attacker_idx, defender_idx);
+
+        {
+            let (cast_anim, cast_effect) = if is_heal {
+                assets.heal_animation_mut(attacker_class)
+            } else {
+                let set = assets.animation_set_mut(attacker_class);
+                (&mut set.attack, &mut set.attack_effect)
+            };
+            start_attack_if_needed(
+                attacker,
+                defender,
+                cast_anim,
+                cast_effect,
+                &mut game.attack_animation_started,
+                &mut game.game_mode,
+                &mut game.attacker_combat_x,
+                &mut game.defender_combat_x,
+            );
+        }
+        enter_combat(
+            attacker,
+            defender,
+            &mut game.attacker_combat_x,
+            &mut game.defender_combat_x,
+            attacker_target_x,
+            defender_target_x,
+            &mut game.combat_entering_timer,
+            delta_time,
+        );
+        start_attack_after_ready(
+            attacker,
+            defender,
+            game.attack_animation_started,
+            &mut game.combat_ready_timer,
+            delta_time,
+        );
+        {
+            let (cast_anim, _) = if is_heal {
+                assets.heal_animation_mut(attacker_class)
+            } else {
+                let set = assets.animation_set_mut(attacker_class);
+                (&mut set.attack, &mut set.attack_effect)
+            };
+            if let Some(result) = minigame::handle_minigame(
+                attacker,
+                defender,
+                game.player_faction,
+                &mut game.timing_bar,
+                &mut game.damage_multiplier,
+                rl,
+                delta_time,
+                cast_anim,
+            ) {
+                game.result_display = Some((result, 1.0, game.damage_multiplier));
+            }
+        }
+        if is_heal {
+            let cast_finished = assets.heal_animation_mut(attacker_class).0.finished;
+            resolve_heal(
+                attacker,
+                defender,
+                cast_finished,
+                &mut game.attack_animation_started,
+                game.damage_multiplier,
+            );
+        } else {
+            let cast_finished = assets.animation_set_mut(attacker_class).attack.finished;
+            let defender_hurt = &mut assets.animation_set_mut(defender_class).hurt;
+            resolve_attack(
+                attacker,
+                defender,
+                cast_finished,
+                defender_hurt,
+                &mut game.attack_animation_started,
+                game.damage_multiplier,
+            );
+        }
+        {
+            let defender_set = assets.animation_set_mut(defender_class);
+            update_hurt_state(defender, &defender_set.hurt, &mut defender_set.die);
+            update_dying_state(defender, &defender_set.die);
+        }
+        combat_exit_pause_timer(
+            defender,
+            game.attack_animation_started,
+            &mut game.game_mode,
+            &mut game.combat_exit_pause_timer,
+            delta_time,
+        );
     }
 }
