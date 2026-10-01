@@ -4,6 +4,7 @@ use crate::cursor::CursorType;
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::map::TileMap;
 use crate::minigame::{TimingBar, TimingResult};
+use crate::screens::winfo;
 use crate::ui::{self, HudRects};
 use crate::unit::{Unit, UnitState};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE};
@@ -497,6 +498,8 @@ pub fn draw_grid_screen(
     cursor_grid_y: i32,
     cursor_type: CursorType,
     mouse_position: Vector2,
+    selected_unit: Option<&Unit>,
+    inspected_enemy: Option<&Unit>,
 ) {
     d.clear_background(Color::BEIGE);
     tile_map.draw(d);
@@ -594,6 +597,13 @@ pub fn draw_grid_screen(
         }
     }
 
+    if let Some(unit) = selected_unit {
+        draw_unit_info(d, assets, unit, winfo::panel_rect());
+    }
+    if let Some(enemy) = inspected_enemy.filter(|u| u.is_alive()) {
+        draw_unit_info(d, assets, enemy, winfo::enemy_panel_rect(hud));
+    }
+
     // écran de fin ----------------------------------------------------------
     let end_text = match game_mode {
         GameMode::Victory => Some(("VICTORY", Color::GOLD)),
@@ -632,6 +642,57 @@ pub fn draw_grid_screen(
     );
 }
 
+/// petite fenêtre de stats à côté du perso sélectionné
+fn draw_unit_info(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit, rect: Rectangle) {
+    d.draw_rectangle_rec(rect, Color::new(30, 30, 30, 220));
+    d.draw_rectangle_lines_ex(rect, 2.0, Color::WHITE);
+
+    let pad = 6.0;
+    let x = rect.x + pad;
+    let mut y = rect.y + pad;
+
+    d.draw_text_ex(
+        &assets.hud_font,
+        &unit.name,
+        Vector2::new(x, y),
+        16.0,
+        1.0,
+        Color::WHITE,
+    );
+    y += 18.0;
+
+    ui::draw_health_bar(
+        d,
+        x,
+        y,
+        winfo::WIDTH - 2.0 * pad,
+        6.0,
+        unit.hp_points,
+        unit.hp_max_points,
+    );
+    y += 10.0;
+
+    let lines = [
+        format!("HP {}/{}", unit.hp_points, unit.hp_max_points),
+        format!("ATK {}  DEF {}", unit.attack_power, unit.defense),
+        format!(
+            "RNG {}  MOV {}/{}",
+            unit.attack_range, unit.move_points_remaining, unit.move_points
+        ),
+    ];
+    for line in &lines {
+        d.draw_text_ex(
+            &assets.hud_font,
+            line,
+            Vector2::new(x, y),
+            14.0,
+            1.0,
+            Color::WHITE,
+        );
+        y += 15.0;
+    }
+}
+
 // écran de combat ------------------------------------------------------------
 pub fn draw_combat_screen(
     d: &mut RaylibDrawHandle,
@@ -658,7 +719,9 @@ pub fn draw_combat_screen(
         let animation = if attacker.state == UnitState::Healing {
             assets.heal_animation_mut(attacker.class).0
         } else {
-            assets.animation_set_mut(attacker.class).for_state_mut(attacker.state)
+            assets
+                .animation_set_mut(attacker.class)
+                .for_state_mut(attacker.state)
         };
         draw_unit_sprite(
             d,

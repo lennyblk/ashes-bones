@@ -238,6 +238,8 @@ fn main() {
                 cursor_grid_y,
                 cursor.cursor_type,
                 mouse_position,
+                game.selected_unit.map(|i| &game.units[i]),
+                game.inspected_enemy.map(|i| &game.units[i]),
             );
         }
     }

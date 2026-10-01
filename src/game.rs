@@ -11,6 +11,8 @@ pub struct Game {
     pub player_faction: Faction,
     // mon index dans units (aucune -> None)
     pub selected_unit: Option<usize>,
+    // ennemi cliqué dont on affiche les stats (index dans units)
+    pub inspected_enemy: Option<usize>,
 
     pub game_mode: GameMode,
     // écran auquel revenir en quittant le menu pause / le guide
@@ -44,6 +46,7 @@ impl Game {
             blocked_tiles,
             player_faction: Faction::Human,
             selected_unit: None,
+            inspected_enemy: None,
 
             game_mode: GameMode::TitleScreen,
             paused_from: GameMode::GridScreen,
@@ -80,6 +83,7 @@ impl Game {
         self.combat_ready_timer = 0.0;
         self.combat_exit_pause_timer = 0.0;
         self.selected_unit = None;
+        self.inspected_enemy = None;
     }
 }
 

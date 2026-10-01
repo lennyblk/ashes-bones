@@ -55,6 +55,14 @@ pub fn update(
 
     // sélection / désélection d'une unité du joueur au clic sur sa case
     if game.game_mode == GameMode::GridScreen && clicked && !click_consumed {
+        // clic sur un ennemi -> on affiche ses stats, clic ailleurs -> on les cache
+        game.inspected_enemy = game.units.iter().position(|u| {
+            u.faction != game.player_faction
+                && u.is_alive()
+                && u.grid_x == cursor_grid_x
+                && u.grid_y == cursor_grid_y
+        });
+
         match game.selected_unit {
             None => {
                 game.selected_unit = game.units.iter().position(|u| {
