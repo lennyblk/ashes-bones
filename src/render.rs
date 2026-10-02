@@ -5,7 +5,7 @@ use crate::duel::{DuelConditions, DuelSide};
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::grid::DuelPreview;
 use crate::map::TileMap;
-use crate::minigame::{TimingBar, TimingResult};
+use crate::minigame::{MiniGame, TimingResult};
 use crate::screens::winfo;
 use crate::ui::{self, HudRects};
 use crate::unit::{Unit, UnitState};
@@ -712,7 +712,7 @@ pub fn draw_combat_screen(
     defender: &Unit,
     attacker_combat_x: f32,
     defender_combat_x: f32,
-    timing_bar: Option<&TimingBar>,
+    minigame: Option<&MiniGame>,
     result_display: Option<&(TimingResult, f32, f32)>,
     conditions: &DuelConditions,
     player_is_attacker: bool,
@@ -797,9 +797,8 @@ pub fn draw_combat_screen(
     }
 
     // MiniGame -----------------------------------------------------------------
-    if let Some(bar) = timing_bar {
-        draw_timing_bar(d, bar);
-        draw_bar_lives(d, assets, bar);
+    if let Some(minigame) = minigame {
+        minigame.draw(d, assets);
         draw_combat_factors(d, assets, conditions, player_is_attacker);
     }
     if let Some((result, _, multiplier)) = result_display {
@@ -837,54 +836,6 @@ fn draw_unit_hud(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit) {
         24.0,
         1.0,
         Color::BLACK,
-    );
-}
-
-fn draw_timing_bar(d: &mut RaylibDrawHandle, bar: &TimingBar) {
-    let bar_x = SCREEN_WIDTH as f32 / 2.0 - 200.0;
-    let bar_y = SCREEN_HEIGHT as f32 - 120.0;
-    let bar_width = 400.0;
-    let bar_height = 30.0;
-
-    // fond de la barre
-    d.draw_rectangle(
-        bar_x as i32,
-        bar_y as i32,
-        bar_width as i32,
-        bar_height as i32,
-        Color::DARKGRAY,
-    );
-
-    // zone good
-    let good_x = bar_x + bar.zone_start * bar_width;
-    let good_width = (bar.zone_end - bar.zone_start) * bar_width;
-    d.draw_rectangle(
-        good_x as i32,
-        bar_y as i32,
-        good_width as i32,
-        bar_height as i32,
-        Color::YELLOW,
-    );
-
-    // zone perfect
-    let perfect_x = bar_x + bar.perfect_zone_start * bar_width;
-    let perfect_width = (bar.perfect_zone_end - bar.perfect_zone_start) * bar_width;
-    d.draw_rectangle(
-        perfect_x as i32,
-        bar_y as i32,
-        perfect_width as i32,
-        bar_height as i32,
-        Color::GREEN,
-    );
-
-    // curseur (ligne blanche qui bouge)
-    let cursor_x = bar_x + bar.cursor_position * bar_width;
-    d.draw_rectangle(
-        cursor_x as i32 - 2,
-        bar_y as i32 - 5,
-        4,
-        bar_height as i32 + 10,
-        Color::WHITE,
     );
 }
 
@@ -967,19 +918,19 @@ fn draw_position_scores(
 fn draw_mini_bar(d: &mut RaylibDrawHandle, x: f32, y: f32, width: f32, side: &DuelSide) {
     let h = (8.0 * PREVIEW_SCALE) as i32;
     d.draw_rectangle(x as i32, y as i32, width as i32, h, Color::DARKGRAY);
-    let zone_x = x + width / 2.0 - side.zone_width * width / 2.0;
+    let zone_x = x + width / 2.0 - side.window * width / 2.0;
     d.draw_rectangle(
         zone_x as i32,
         y as i32,
-        (side.zone_width * width) as i32,
+        (side.window * width) as i32,
         h,
         Color::YELLOW,
     );
-    let perfect_x = x + width / 2.0 - side.perfect_width * width / 2.0;
+    let perfect_x = x + width / 2.0 - side.precision * width / 2.0;
     d.draw_rectangle(
         perfect_x as i32,
         y as i32,
-        (side.perfect_width * width).ceil() as i32,
+        (side.precision * width).ceil() as i32,
         h,
         Color::GREEN,
     );
@@ -987,10 +938,10 @@ fn draw_mini_bar(d: &mut RaylibDrawHandle, x: f32, y: f32, width: f32, side: &Du
 
 fn side_summary(side: &DuelSide) -> String {
     format!(
-        "zone {}%  perfect {}%  speed x{:.1}  lives {}",
-        (side.zone_width * 100.0).round(),
-        (side.perfect_width * 100.0).round(),
-        side.speed,
+        "window {}%  precision {}%  tempo x{:.1}  lives {}",
+        (side.window * 100.0).round(),
+        (side.precision * 100.0).round(),
+        side.tempo,
         side.lives
     )
 }
@@ -1126,33 +1077,7 @@ fn draw_duel_preview(
     }
 }
 
-// combat : vies + rappel des facteurs ------------------------------------------
-
-fn draw_bar_lives(d: &mut RaylibDrawHandle, assets: &Assets, bar: &TimingBar) {
-    let bar_x = SCREEN_WIDTH as f32 / 2.0 - 200.0;
-    let bar_y = SCREEN_HEIGHT as f32 - 120.0;
-    for i in 0..bar.lives {
-        d.draw_rectangle(
-            (bar_x - 22.0 - i as f32 * 18.0) as i32,
-            (bar_y + 8.0) as i32,
-            14,
-            14,
-            Color::RED,
-        );
-    }
-    if bar.saved_timer > 0.0 {
-        let text = "SAVED!";
-        let size = assets.info_font.measure_text(text, 28.0, 1.0);
-        d.draw_text_ex(
-            &assets.info_font,
-            text,
-            Vector2::new(SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0, bar_y - 40.0),
-            28.0,
-            1.0,
-            Color::ORANGE,
-        );
-    }
-}
+// combat : rappel des facteurs ------------------------------------------
 
 fn draw_combat_factors(
     d: &mut RaylibDrawHandle,

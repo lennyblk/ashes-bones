@@ -1,40 +1,45 @@
 use crate::combat::attack_damage_dealt;
 use crate::unit::Unit;
 
-// valeurs de base de la barre de timing, modifiées ensuite par le placement sur la grille
-pub const BASE_ZONE: f32 = 0.2;
-pub const BASE_PERFECT: f32 = 0.03;
-const MIN_ZONE: f32 = 0.06;
-const MAX_ZONE: f32 = 0.45;
+// réglages de base des mini-jeux, modifiés ensuite par le placement sur la grille
+pub const BASE_WINDOW: f32 = 0.2;
+pub const BASE_PRECISION: f32 = 0.03;
+const MIN_WINDOW: f32 = 0.06;
+const MAX_WINDOW: f32 = 0.45;
 const MAX_LIVES: u8 = 2;
 
-const FLANK_ZONE: f32 = 0.04; // par allié qui encercle (max 3)
-const GUARD_ZONE: f32 = 0.03; // par allié qui garde le défenseur (max 2)
-const PERFECT_BONUS: f32 = 0.03;
-const SHOOTER_IN_MELEE_ZONE: f32 = 0.04;
+const FLANK_WINDOW: f32 = 0.04; // par allié qui encercle (max 3)
+const GUARD_WINDOW: f32 = 0.03; // par allié qui garde le défenseur (max 2)
+const PRECISION_BONUS: f32 = 0.03;
+const SHOOTER_IN_MELEE_WINDOW: f32 = 0.04;
 
-/// conditions de la barre de timing pour un camp du duel
+/// réglages de difficulté d'un camp du duel. Génériques : chaque mini-jeu les traduit
+/// à sa façon (zone de la barre, rayon d'une cible, temps par touche...)
 #[derive(Clone, Copy, Debug)]
 pub struct DuelSide {
-    pub zone_width: f32,
-    pub perfect_width: f32,
-    pub speed: f32,
+    // marge d'erreur pour réussir (0..1), ex : largeur de la zone jaune
+    pub window: f32,
+    // marge pour un PERFECT, toujours <= window, ex : largeur de la zone verte
+    pub precision: f32,
+    // multiplicateur de vitesse du mini-jeu (curseur, cible, rythme...)
+    pub tempo: f32,
+    // ratés pardonnés
     pub lives: u8,
 }
 
 impl DuelSide {
     fn base() -> DuelSide {
         DuelSide {
-            zone_width: BASE_ZONE,
-            perfect_width: BASE_PERFECT,
-            speed: 1.0,
+            window: BASE_WINDOW,
+            precision: BASE_PRECISION,
+            tempo: 1.0,
             lives: 0,
         }
     }
 
     fn clamped(mut self) -> DuelSide {
-        self.zone_width = self.zone_width.clamp(MIN_ZONE, MAX_ZONE);
-        self.perfect_width = self.perfect_width.clamp(0.0, self.zone_width);
+        self.window = self.window.clamp(MIN_WINDOW, MAX_WINDOW);
+        self.precision = self.precision.clamp(0.0, self.window);
         self.lives = self.lives.min(MAX_LIVES);
         self
     }
@@ -126,14 +131,14 @@ pub fn compute(
         .count()
         .min(3) as f32;
     if flankers > 0.0 {
-        att.zone_width += FLANK_ZONE * flankers;
-        def.zone_width -= FLANK_ZONE * flankers;
+        att.window += FLANK_WINDOW * flankers;
+        def.window -= FLANK_WINDOW * flankers;
         factors.push(Factor {
             label: format!(
-                "Flank x{}: zone +{}% / their zone -{}%",
+                "Flank x{}: window +{}% / their window -{}%",
                 flankers as i32,
-                pct(FLANK_ZONE * flankers),
-                pct(FLANK_ZONE * flankers)
+                pct(FLANK_WINDOW * flankers),
+                pct(FLANK_WINDOW * flankers)
             ),
             favors_attacker: true,
         });
@@ -143,12 +148,12 @@ pub fn compute(
     if dist == 1 {
         let mirror = (2 * defender_pos.0 - from.0, 2 * defender_pos.1 - from.1);
         if others(attacker.faction).any(|(_, u)| (u.grid_x, u.grid_y) == mirror) {
-            att.perfect_width += PERFECT_BONUS;
-            def.perfect_width = 0.0;
+            att.precision += PRECISION_BONUS;
+            def.precision = 0.0;
             factors.push(Factor {
                 label: format!(
-                    "Pincer: perfect +{}% / no perfect parry",
-                    pct(PERFECT_BONUS)
+                    "Pincer: precision +{}% / no perfect parry",
+                    pct(PRECISION_BONUS)
                 ),
                 favors_attacker: true,
             });
@@ -174,13 +179,13 @@ pub fn compute(
         .count()
         .min(MAX_LIVES as usize) as u8;
     if guards > 0 {
-        att.zone_width -= GUARD_ZONE * guards as f32;
+        att.window -= GUARD_WINDOW * guards as f32;
         def.lives += guards;
         factors.push(Factor {
             label: format!(
-                "Guarded x{}: zone -{}% / they get +{} lives",
+                "Guarded x{}: window -{}% / they get +{} lives",
                 guards,
-                pct(GUARD_ZONE * guards as f32),
+                pct(GUARD_WINDOW * guards as f32),
                 guards
             ),
             favors_attacker: false,
@@ -190,26 +195,26 @@ pub fn compute(
     // tireurs : à distance on vise posé, au contact c'est la panique
     if attacker.attack_range >= 2 {
         if dist >= 2 {
-            att.speed *= 0.8;
+            att.tempo *= 0.8;
             factors.push(Factor {
-                label: String::from("Aimed shot: cursor -20% speed"),
+                label: String::from("Aimed shot: tempo -20%"),
                 favors_attacker: true,
             });
         } else {
-            att.zone_width -= SHOOTER_IN_MELEE_ZONE;
+            att.window -= SHOOTER_IN_MELEE_WINDOW;
             factors.push(Factor {
-                label: format!("Point blank: zone -{}%", pct(SHOOTER_IN_MELEE_ZONE)),
+                label: format!("Point blank: window -{}%", pct(SHOOTER_IN_MELEE_WINDOW)),
                 favors_attacker: false,
             });
         }
     }
     if defender.attack_range >= 2 && dist == 1 {
-        def.zone_width -= SHOOTER_IN_MELEE_ZONE;
-        def.speed *= 1.3;
+        def.window -= SHOOTER_IN_MELEE_WINDOW;
+        def.tempo *= 1.3;
         factors.push(Factor {
             label: format!(
-                "Caught in melee: their zone -{}%, cursor +30%",
-                pct(SHOOTER_IN_MELEE_ZONE)
+                "Caught in melee: their window -{}%, tempo +30%",
+                pct(SHOOTER_IN_MELEE_WINDOW)
             ),
             favors_attacker: true,
         });
@@ -217,16 +222,19 @@ pub fn compute(
 
     // désespoir : sous 30% PV, la fenêtre parfaite s'élargit (comeback)
     if is_desperate(attacker) {
-        att.perfect_width += PERFECT_BONUS;
+        att.precision += PRECISION_BONUS;
         factors.push(Factor {
-            label: format!("Desperate: perfect +{}%", pct(PERFECT_BONUS)),
+            label: format!("Desperate: precision +{}%", pct(PRECISION_BONUS)),
             favors_attacker: true,
         });
     }
-    if is_desperate(defender) && def.perfect_width > 0.0 {
-        def.perfect_width += PERFECT_BONUS;
+    if is_desperate(defender) && def.precision > 0.0 {
+        def.precision += PRECISION_BONUS;
         factors.push(Factor {
-            label: format!("They're desperate: their perfect +{}%", pct(PERFECT_BONUS)),
+            label: format!(
+                "They're desperate: their precision +{}%",
+                pct(PRECISION_BONUS)
+            ),
             favors_attacker: false,
         });
     }
@@ -277,7 +285,7 @@ mod tests {
         ];
         let c = compute(&units, 0, (0, 0), 1);
         assert!(c.factors.is_empty());
-        assert_eq!(c.attacker.zone_width, BASE_ZONE);
+        assert_eq!(c.attacker.window, BASE_WINDOW);
         assert_eq!(c.base_damage, 45);
     }
 
@@ -290,9 +298,9 @@ mod tests {
             unit(Faction::Human, 2, 0, 1),
         ];
         let c = compute(&units, 0, (0, 0), 1);
-        assert!(c.attacker.zone_width > BASE_ZONE);
-        assert!(c.attacker.perfect_width > BASE_PERFECT);
-        assert_eq!(c.defender.perfect_width, 0.0);
+        assert!(c.attacker.window > BASE_WINDOW);
+        assert!(c.attacker.precision > BASE_PRECISION);
+        assert_eq!(c.defender.precision, 0.0);
         assert_eq!(c.score(), 2);
     }
 
@@ -304,7 +312,7 @@ mod tests {
             unit(Faction::Undead, 1, 1, 1),
         ];
         let c = compute(&units, 0, (0, 0), 1);
-        assert!(c.attacker.zone_width < BASE_ZONE);
+        assert!(c.attacker.window < BASE_WINDOW);
         assert_eq!(c.defender.lives, 1);
         assert_eq!(c.score(), -1);
     }
@@ -317,6 +325,6 @@ mod tests {
             unit(Faction::Undead, 0, 0, 1),
         ];
         let c = compute(&units, 0, (3, 0), 1);
-        assert!(c.attacker.speed < 1.0);
+        assert!(c.attacker.tempo < 1.0);
     }
 }

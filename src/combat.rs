@@ -296,7 +296,7 @@ pub fn update(game: &mut Game, assets: &mut Assets, rl: &RaylibHandle, delta_tim
                 attacker,
                 defender,
                 game.player_faction,
-                &mut game.timing_bar,
+                &mut game.minigame,
                 &game.duel_conditions,
                 &mut game.damage_multiplier,
                 rl,

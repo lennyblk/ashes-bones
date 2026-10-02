@@ -216,7 +216,7 @@ fn main() {
                     &game.units[defender_idx],
                     game.attacker_combat_x,
                     game.defender_combat_x,
-                    game.timing_bar.as_ref(),
+                    game.minigame.as_ref(),
                     game.result_display.as_ref(),
                     &game.duel_conditions,
                     game.units[attacker_idx].faction == game.player_faction,
