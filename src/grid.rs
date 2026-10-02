@@ -19,7 +19,7 @@ pub struct GridHighlights {
     pub healable_ally_positions: Vec<(i32, i32)>,
     // conditions du duel si on attaque l'ennemi survolé (ou depuis la case survolée)
     pub duel_preview: Option<DuelPreview>,
-    // avantage net de chaque case d'attaque possible (mode ChoosingPosition)
+    // avantage de chaque case d'attaque possible, en % de dégâts (mode ChoosingPosition)
     pub position_scores: Vec<((i32, i32), i32)>,
 }
 
@@ -281,7 +281,7 @@ fn build_duel_preview(
             let scores: Vec<((i32, i32), i32)> = choosing_positions
                 .iter()
                 .filter(|&&p| distance(p, target_pos) <= me.attack_range)
-                .map(|&p| (p, duel::compute(&game.units, sel, p, target).score()))
+                .map(|&p| (p, duel::compute(&game.units, sel, p, target).advantage()))
                 .collect();
             let preview = scores
                 .iter()
@@ -308,7 +308,7 @@ fn build_duel_preview(
             );
             let best = positions
                 .iter()
-                .max_by_key(|&&p| duel::compute(&game.units, sel, p, target).score());
+                .max_by_key(|&&p| duel::compute(&game.units, sel, p, target).advantage());
             (
                 best.map(|&p| preview_from(target, p, positions.len() > 1)),
                 Vec::new(),

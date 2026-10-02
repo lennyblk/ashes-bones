@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::duel::{self, DuelSide};
+use crate::duel;
 use crate::movement::MovementRange;
 use crate::unit::{PendingAction, Unit, UnitState};
 use crate::{GRID_COLS, GRID_ROWS};
@@ -79,16 +79,6 @@ fn plan_to(
     }
 }
 
-/// multiplicateur de dégâts attendu quand le joueur pare avec cette barre
-pub fn expected_parry_multiplier(side: &DuelSide) -> f32 {
-    let single_try = (side.window / side.tempo * 2.5).clamp(0.0, 0.95);
-    let hit = 1.0 - (1.0 - single_try).powi(side.lives as i32 + 1);
-    let perfect = hit * (2.0 * side.precision / side.window).min(1.0);
-    let good = hit - perfect;
-    let bad = 1.0 - hit;
-    perfect * 0.5 + good * 1.0 + bad * 1.5
-}
-
 /// note de l'attaque de `idx` sur `target_idx` depuis `from`
 pub fn attack_score(units: &[Unit], idx: usize, from: (i32, i32), target_idx: usize) -> f32 {
     let me = &units[idx];
@@ -96,7 +86,7 @@ pub fn attack_score(units: &[Unit], idx: usize, from: (i32, i32), target_idx: us
     // c'est le joueur qui pare : seule la barre du défenseur compte pour l'IA
     let conditions = duel::compute(units, idx, from, target_idx);
     let base = conditions.base_damage as f32;
-    let expected = base * expected_parry_multiplier(&conditions.defender);
+    let expected = base * conditions.defender.odds().parry_multiplier();
     let hp = target.hp_points.max(1) as f32;
 
     let mut score = SCORE_DAMAGE * (expected / hp).min(1.0);

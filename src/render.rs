@@ -373,7 +373,7 @@ fn draw_guide_block(
             let rect = Rectangle::new(
                 x,
                 y + 6.0,
-                width.min(560.0),
+                width.min(700.0),
                 lines.len() as f32 * 22.0 + 16.0,
             );
             d.draw_rectangle_rec(rect, Color::new(10, 10, 10, 235));
@@ -436,26 +436,27 @@ fn draw_guide_diagram(d: &mut impl RaylibDraw, assets: &Assets, rows: &[&str], x
             }
 
             let badge = match c {
-                '2' => Some(("+2", guide::GOOD)),
-                '1' => Some(("+1", guide::GOOD)),
+                '2' => Some(("+25", guide::GOOD)),
+                '1' => Some(("+12", guide::GOOD)),
                 '0' => Some(("0", Color::WHITE)),
-                'n' => Some(("-1", guide::BAD)),
+                'n' => Some(("-4", guide::BAD)),
                 _ => None,
             };
             if let Some((label, color)) = badge {
                 d.draw_rectangle_rec(rect, Color::new(255, 255, 0, 170));
+                let size = assets.info_font.measure_text(label, 13.0, 1.0);
                 d.draw_rectangle(
-                    rect.x as i32 + 2,
+                    rect.x as i32 + 1,
                     rect.y as i32 + 2,
-                    22,
+                    size.x as i32 + 4,
                     16,
                     Color::new(20, 20, 20, 200),
                 );
                 d.draw_text_ex(
                     &assets.info_font,
                     label,
-                    Vector2::new(rect.x + 5.0, rect.y + 2.0),
-                    15.0,
+                    Vector2::new(rect.x + 3.0, rect.y + 3.0),
+                    13.0,
                     1.0,
                     color,
                 );
@@ -1122,7 +1123,8 @@ fn draw_position_scores(
         } else {
             score.to_string()
         };
-        let font_size = 14.0 * PREVIEW_SCALE;
+        // "+12" doit tenir dans une case de 48 px
+        let font_size = 12.0 * PREVIEW_SCALE;
         let size = assets.info_font.measure_text(&text, font_size, 1.0);
         let rect = Rectangle::new(
             (x * TILE_SIZE) as f32 + 2.0,
@@ -1241,6 +1243,28 @@ fn draw_duel_preview(
             ko_color,
         ),
     ];
+    // chances estimées (même calcul que l'IA) et avantage du placement
+    let odds = c.attacker.odds();
+    let expected = (c.base_damage as f32 * odds.attack_multiplier()).round() as i32;
+    let advantage = c.advantage();
+    lines.push((
+        format!(
+            "Expected ~{} dmg   odds: perfect {}%  good {}%  bad {}%",
+            expected,
+            (odds.perfect * 100.0).round(),
+            (odds.good * 100.0).round(),
+            (odds.bad * 100.0).round()
+        ),
+        Color::WHITE,
+    ));
+    lines.push((
+        format!(
+            "Placement: {}{}% damage vs no modifiers",
+            if advantage > 0 { "+" } else { "" },
+            advantage
+        ),
+        score_color(advantage),
+    ));
     let bars_y_index = lines.len();
     lines.push((
         format!("You    {}", side_summary(&c.attacker)),
@@ -1278,7 +1302,7 @@ fn draw_duel_preview(
         Rectangle::new(10.0, 10.0, width, height)
     };
     d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 225));
-    d.draw_rectangle_lines_ex(panel, 2.0 * PREVIEW_SCALE, score_color(c.score()));
+    d.draw_rectangle_lines_ex(panel, 2.0 * PREVIEW_SCALE, score_color(advantage));
 
     let x = panel.x + pad;
     let mut y = panel.y + pad;

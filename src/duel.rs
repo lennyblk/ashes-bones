@@ -40,6 +40,42 @@ impl DuelSide {
         self.lives = self.lives.min(MAX_LIVES);
         self
     }
+
+    /// chances estimées de PERFECT / GOOD / BAD avec cette barre. Estimation grossière
+    /// (zone large et lente = plus facile, chaque vie redonne un essai) : sert à comparer
+    /// des cases entre elles, pas à prédire le vrai taux de réussite d'un joueur
+    pub fn odds(&self) -> Odds {
+        let single_try = (self.window / self.tempo * ODDS_SCALE).clamp(0.0, 0.95);
+        let hit = 1.0 - (1.0 - single_try).powi(self.lives as i32 + 1);
+        let perfect = hit * (2.0 * self.precision / self.window).min(1.0);
+        Odds {
+            perfect,
+            good: hit - perfect,
+            bad: 1.0 - hit,
+        }
+    }
+}
+
+/// réglage de l'estimation : window 20% -> 50% de réussite en un essai
+const ODDS_SCALE: f32 = 2.5;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Odds {
+    pub perfect: f32,
+    pub good: f32,
+    pub bad: f32,
+}
+
+impl Odds {
+    /// multiplicateur de dégâts infligés attendu en attaque (BAD x0.5 / GOOD x1 / PERFECT x1.5)
+    pub fn attack_multiplier(&self) -> f32 {
+        self.perfect * 1.5 + self.good + self.bad * 0.5
+    }
+
+    /// multiplicateur de dégâts subis attendu en défense (BAD x1.5 / GOOD x1 / PERFECT x0.5)
+    pub fn parry_multiplier(&self) -> f32 {
+        self.perfect * 0.5 + self.good + self.bad * 1.5
+    }
 }
 
 /// une raison qui change le duel, affichée au joueur (preview sur la grille + écran de combat)
@@ -77,12 +113,12 @@ impl DuelConditions {
         }
     }
 
-    /// avantage net de l'attaquant (facteurs pour - facteurs contre), pour noter les cases
-    pub fn score(&self) -> i32 {
-        self.factors
-            .iter()
-            .map(|f| if f.favors_attacker { 1 } else { -1 })
-            .sum()
+    /// dégâts attendus de l'attaquant en % par rapport à un duel sans placement
+    /// (ex : +12 = 12% de dégâts en plus en moyenne). Note des cases d'attaque
+    pub fn advantage(&self) -> i32 {
+        let neutral = DuelSide::base().odds().attack_multiplier();
+        let here = self.attacker.odds().attack_multiplier();
+        ((here / neutral - 1.0) * 100.0).round() as i32
     }
 }
 
@@ -296,7 +332,7 @@ mod tests {
         assert!(c.attacker.window > BASE_WINDOW);
         assert!(c.attacker.precision > BASE_PRECISION);
         assert_eq!(c.defender.precision, 0.0);
-        assert_eq!(c.score(), 2);
+        assert!(c.advantage() > 0);
     }
 
     #[test]
@@ -309,7 +345,7 @@ mod tests {
         let c = compute(&units, 0, (0, 0), 1);
         assert!(c.attacker.window < BASE_WINDOW);
         assert_eq!(c.defender.lives, 1);
-        assert_eq!(c.score(), -1);
+        assert!(c.advantage() < 0);
     }
 
     #[test]
