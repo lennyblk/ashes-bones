@@ -65,17 +65,8 @@ pub fn draw_title_screen(
 ) {
     d.clear_background(Color::BLACK);
 
-    for background in [
-        &assets.title_screen_background_texture_1,
-        &assets.title_screen_background_texture_2,
-        &assets.title_screen_background_texture_3,
-        &assets.title_screen_background_texture_4,
-        &assets.title_screen_background_texture_5,
-    ] {
-        draw_fullscreen_texture(d, background);
-    }
+    draw_fullscreen_texture(d, &assets.title_background_texture);
 
-    draw_texture_at(d, &assets.title, hud.title);
     draw_texture_at(d, &assets.btn_play_title_screen, hud.btn_play_title_screen);
     draw_texture_at(
         d,

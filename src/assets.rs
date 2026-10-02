@@ -70,6 +70,7 @@ pub struct Assets {
     pub title_screen_background_texture_4: Texture2D,
     pub title_screen_background_texture_5: Texture2D,
     pub menu_background_texture: Texture2D,
+    pub title_background_texture: Texture2D,
     pub btn_exit_title_screen: Texture2D,
     pub btn_play_title_screen: Texture2D,
     pub btn_settings_title_screen: Texture2D,
@@ -655,6 +656,9 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .unwrap();
     let menu_background_texture = rl
         .load_texture(thread, "assets/backgrounds/plains1.png")
+        .unwrap();
+    let title_background_texture = rl
+        .load_texture(thread, "assets/backgrounds/title.png")
         .unwrap();
     let btn_exit_title_screen = rl
         .load_texture(thread, "assets/menu-ui/btn_exit_normal.png")
@@ -1708,6 +1712,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         title_screen_background_texture_4,
         title_screen_background_texture_5,
         menu_background_texture,
+        title_background_texture,
         btn_exit_title_screen,
         btn_play_title_screen,
         btn_settings_title_screen,
