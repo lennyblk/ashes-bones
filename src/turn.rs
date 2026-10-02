@@ -1,7 +1,6 @@
 use crate::ai;
 use crate::game::Game;
 use crate::game_mode::{GameMode, TurnPhase};
-use crate::unit::Unit;
 
 pub const ENEMY_TURN_DELAY: f32 = 0.5;
 
@@ -30,42 +29,9 @@ pub fn update_enemy_turn(game: &mut Game, delta_time: f32) {
             game.enemy_turn_delay -= delta_time;
         } else if let Some(idx) = game.ai_turn_queue.pop() {
             if game.units[idx].is_alive() {
-                let targets: Vec<(usize, Unit)> = game
-                    .units
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, u)| u.faction == game.player_faction && u.is_alive())
-                    .map(|(i, u)| (i, u.clone()))
-                    .collect();
-                // alliés blessés que l'unité pourrait soigner (pas elle-même)
-                let ai_faction = game.units[idx].faction;
-                let wounded_allies: Vec<(usize, Unit)> = game
-                    .units
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, u)| {
-                        *i != idx
-                            && u.faction == ai_faction
-                            && u.is_alive()
-                            && u.hp_points < u.hp_max_points
-                    })
-                    .map(|(i, u)| (i, u.clone()))
-                    .collect();
-                // toute autre unité vivante (alliée ou ennemie) bloque le passage
-                let obstacles: Vec<Unit> = game
-                    .units
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, u)| *i != idx && u.is_alive())
-                    .map(|(_, u)| u.clone())
-                    .collect();
-                ai::take_turn(
-                    &mut game.units[idx],
-                    &targets,
-                    &wounded_allies,
-                    &obstacles,
-                    &game.blocked_tiles,
-                );
+                game.units[idx].start_turn();
+                let plan = ai::plan_turn(&game.units, idx, &game.blocked_tiles);
+                ai::apply_plan(&mut game.units[idx], plan);
                 game.ai_acting_unit = Some(idx);
             }
         }

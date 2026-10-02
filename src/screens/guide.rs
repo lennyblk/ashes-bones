@@ -291,6 +291,8 @@ pub fn content() -> Vec<Block> {
         text("a +1 from Pincer is worth more than a +1 from Aimed shot."),
         Block::Gap,
         heading("Tips"),
+        text("Enemies play the same game: they flank, pincer and finish"),
+        text("wounded units. Isolated units are their favorite targets."),
         text("Gang up: flank + pincer turns a hard duel into an easy one."),
         text("Keep your shooters away from enemy melee units."),
         text("Leave an ally next to fragile units: they get lives on defense."),
