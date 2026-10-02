@@ -67,6 +67,12 @@ fn main() {
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
+        // temps accéléré pour la grille seulement (bouton x2), le combat garde le vrai temps
+        let grid_dt = if game.game_mode == game_mode::GameMode::GridScreen {
+            delta_time * game.grid_speed
+        } else {
+            delta_time
+        };
 
         let mouse_position = rl.get_mouse_position();
         // en pause ou dans le guide, la partie est gelée : ni mouvement ni animation
@@ -75,7 +81,7 @@ fn main() {
             game_mode::GameMode::PauseScreen | game_mode::GameMode::GuideScreen
         ) {
             for unit in game.units.iter_mut() {
-                unit.update_position(delta_time);
+                unit.update_position(grid_dt);
                 unit.advance_path();
             }
         }
@@ -118,6 +124,19 @@ fn main() {
             click_consumed = true;
         }
 
+        // bouton x1 / x2 (ou touche F), dispo aussi pendant le tour ennemi
+        if game.game_mode == game_mode::GameMode::GridScreen
+            && (input::speed_toggle_pressed(&rl)
+                || input::is_button_clicked(
+                    mouse_position,
+                    input::mouse_is_clicked(&rl),
+                    hud.btn_speed,
+                ))
+        {
+            game.grid_speed = if game.grid_speed > 1.0 { 1.0 } else { 2.0 };
+            click_consumed = true;
+        }
+
         // fin de tour : bouton end turn, ou auto quand tous les persos ont fini
         let end_turn_clicked = input::is_button_clicked(
             mouse_position,
@@ -148,7 +167,7 @@ fn main() {
             click_consumed = true;
         }
 
-        turn::update_enemy_turn(&mut game, delta_time);
+        turn::update_enemy_turn(&mut game, grid_dt);
 
         combat::update(&mut game, &mut assets, &rl, delta_time);
 
@@ -174,8 +193,18 @@ fn main() {
             game.active_combat = None;
         }
 
-        let cursor_grid_x = mouse_position.x as i32 / TILE_SIZE;
-        let cursor_grid_y = mouse_position.y as i32 / TILE_SIZE;
+        // souris sur le bouton x2 : aucune case visée, sinon le clic ferait aussi
+        // marcher l'unité sélectionnée vers la case sous le bouton
+        let over_speed_button = game.game_mode == game_mode::GameMode::GridScreen
+            && hud.btn_speed.check_collision_point_rec(mouse_position);
+        let (cursor_grid_x, cursor_grid_y) = if over_speed_button {
+            (-1, -1)
+        } else {
+            (
+                mouse_position.x as i32 / TILE_SIZE,
+                mouse_position.y as i32 / TILE_SIZE,
+            )
+        };
 
         let highlights = grid::update(&mut game, &rl, click_consumed, cursor_grid_x, cursor_grid_y);
 
@@ -233,7 +262,7 @@ fn main() {
             render::draw_grid_screen(
                 &mut d,
                 &mut assets,
-                delta_time,
+                grid_dt,
                 &tile_map,
                 &hud,
                 &game.units,
@@ -250,6 +279,7 @@ fn main() {
                 mouse_position,
                 game.selected_unit.map(|i| &game.units[i]),
                 game.inspected_enemy.map(|i| &game.units[i]),
+                game.grid_speed,
                 highlights.duel_preview.as_ref(),
                 &highlights.position_scores,
             );

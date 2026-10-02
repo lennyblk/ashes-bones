@@ -721,6 +721,7 @@ pub fn draw_grid_screen(
     mouse_position: Vector2,
     selected_unit: Option<&Unit>,
     inspected_enemy: Option<&Unit>,
+    grid_speed: f32,
     duel_preview: Option<&DuelPreview>,
     position_scores: &[((i32, i32), i32)],
 ) {
@@ -745,6 +746,14 @@ pub fn draw_grid_screen(
         }
         TurnPhase::EnemyTurn => {
             draw_texture_at(d, &assets.banner_enemy_turn, hud.banner_enemy_turn);
+        }
+    }
+    if game_mode == GameMode::GridScreen {
+        let label = if grid_speed > 1.0 { "x2" } else { "x1" };
+        ui::draw_text_button(d, &assets.hud_font, hud.btn_speed, label);
+        if grid_speed > 1.0 {
+            // contour doré quand l'accéléré est actif
+            d.draw_rectangle_lines_ex(hud.btn_speed, 3.0, Color::GOLD);
         }
     }
 

@@ -24,6 +24,9 @@ pub struct Game {
     pub guide_dragging: bool,
 
     pub current_turn: TurnPhase,
+    // vitesse de la grille (x1 / x2) : marche, animations, enchaînement des ennemis.
+    // Gardée d'une partie à l'autre, n'affecte ni le combat ni les mini-jeux
+    pub grid_speed: f32,
     pub enemy_turn_delay: f32,
     // ennemis qui restent à jouer ce tour, un par un
     pub ai_turn_queue: Vec<usize>,
@@ -61,6 +64,7 @@ impl Game {
             guide_dragging: false,
 
             current_turn: TurnPhase::PlayerTurn,
+            grid_speed: 1.0,
             enemy_turn_delay: 0.0,
             ai_turn_queue: Vec::new(),
             ai_acting_unit: None,

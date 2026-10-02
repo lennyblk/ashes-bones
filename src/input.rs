@@ -113,6 +113,10 @@ pub fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
     rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 }
 
+pub fn speed_toggle_pressed(rl: &RaylibHandle) -> bool {
+    rl.is_key_pressed(KEY_F)
+}
+
 pub fn cancel_pressed(rl: &RaylibHandle) -> bool {
     rl.is_key_pressed(KEY_B)
 }

@@ -5,6 +5,7 @@ use raylib::prelude::*;
 pub struct HudRects {
     pub btn_end_turn: Rectangle,
     pub btn_wait: Rectangle,
+    pub btn_speed: Rectangle,
     pub banner_your_turn: Rectangle,
     pub banner_enemy_turn: Rectangle,
     pub btn_retry: Rectangle,
@@ -44,6 +45,13 @@ impl HudRects {
             height: 64.0,
         };
         let banner_enemy_turn = banner_your_turn;
+        // à gauche de la bannière de tour, le seul coin toujours libre sur la grille
+        let btn_speed = Rectangle {
+            x: 20.0,
+            y: banner_your_turn.y + 5.0,
+            width: 80.0,
+            height: 40.0,
+        };
         let btn_retry = Rectangle {
             x: SCREEN_WIDTH as f32 / 2.0 - 64.0,  // centré, largeur 128
             y: SCREEN_HEIGHT as f32 / 2.0 + 60.0, // sous le texte
@@ -145,6 +153,7 @@ impl HudRects {
         HudRects {
             btn_end_turn,
             btn_wait,
+            btn_speed,
             banner_your_turn,
             banner_enemy_turn,
             btn_retry,

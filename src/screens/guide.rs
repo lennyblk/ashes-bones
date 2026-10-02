@@ -94,6 +94,7 @@ pub fn content() -> Vec<Block> {
         text("Priests and Necromancers click a green ally to heal it."),
         text("Several tiles can reach the target? Pick one (yellow)."),
         text("B cancels an action, Escape opens the pause menu."),
+        text("x1/x2 button (or F) speeds up the map, combats stay normal."),
         text("Win by wiping out every enemy unit."),
         Block::Gap,
         heading("Combat: the minigame"),
