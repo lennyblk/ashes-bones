@@ -1,4 +1,5 @@
 use crate::animation::Animation;
+use crate::duel::{DuelConditions, DuelSide};
 use crate::unit::{Faction, Unit, UnitState};
 use raylib::prelude::*;
 
@@ -18,32 +19,36 @@ pub struct TimingBar {
     pub perfect_zone_end: f32,
     pub time_remaining: f32,
     pub result: Option<TimingResult>,
+    // ratés pardonnés restants (soutien / garde sur la grille)
+    pub lives: u8,
+    // > 0 pendant qu'on affiche "SAVED" après un raté pardonné
+    pub saved_timer: f32,
 }
 
-const ZONE_WIDTH: f32 = 0.2;
-const PERFECT_WIDTH: f32 = 0.03;
-
 impl TimingBar {
-    /// zone placée aléatoirement (jamais collée aux bords).
-    pub fn new(rl: &RaylibHandle) -> TimingBar {
+    /// zone placée aléatoirement (jamais collée aux bords), taille selon les conditions du duel
+    pub fn new(rl: &RaylibHandle, side: &DuelSide) -> TimingBar {
         let min_start = 10;
-        let max_start = (100.0 * (0.9 - ZONE_WIDTH)) as i32;
-        let zone_start = rl.get_random_value::<i32>(min_start..=max_start) as f32 / 100.0;
-        let zone_end = zone_start + ZONE_WIDTH;
+        let max_start = (100.0 * (0.9 - side.zone_width)) as i32;
+        let zone_start =
+            rl.get_random_value::<i32>(min_start..=max_start.max(min_start)) as f32 / 100.0;
+        let zone_end = zone_start + side.zone_width;
 
-        let zone_center = zone_start + ZONE_WIDTH / 2.0;
-        let perfect_zone_start = zone_center - PERFECT_WIDTH / 2.0;
-        let perfect_zone_end = zone_center + PERFECT_WIDTH / 2.0;
+        let zone_center = zone_start + side.zone_width / 2.0;
+        let perfect_zone_start = zone_center - side.perfect_width / 2.0;
+        let perfect_zone_end = zone_center + side.perfect_width / 2.0;
 
         TimingBar {
             cursor_position: 0.0,
-            speed: 1.0,
+            speed: side.speed,
             zone_start,
             zone_end,
             perfect_zone_start,
             perfect_zone_end,
             time_remaining: 4.0,
             result: None,
+            lives: side.lives,
+            saved_timer: 0.0,
         }
     }
 
@@ -57,6 +62,8 @@ impl TimingBar {
             self.speed = -self.speed;
         }
 
+        self.saved_timer = (self.saved_timer - delta_time).max(0.0);
+
         if self.result.is_none() {
             self.time_remaining -= delta_time;
             if self.time_remaining <= 0.0 {
@@ -65,6 +72,7 @@ impl TimingBar {
         }
     }
 
+    /// un raté avec une vie en stock est pardonné : on perd la vie et la barre continue
     pub fn try_hit(&mut self) -> Option<TimingResult> {
         if self.cursor_position >= self.zone_start && self.cursor_position <= self.zone_end {
             if self.cursor_position >= self.perfect_zone_start
@@ -74,6 +82,9 @@ impl TimingBar {
             } else {
                 self.result = Some(TimingResult::Good);
             }
+        } else if self.lives > 0 {
+            self.lives -= 1;
+            self.saved_timer = 0.6;
         } else {
             self.result = Some(TimingResult::Bad);
         }
@@ -86,6 +97,7 @@ pub fn handle_minigame(
     _defender: &mut Unit,
     player_faction: Faction,
     timing_bar: &mut Option<TimingBar>,
+    conditions: &DuelConditions,
     damage_multiplier: &mut f32,
     rl: &RaylibHandle,
     delta_time: f32,
@@ -98,7 +110,7 @@ pub fn handle_minigame(
     let player_is_attacker = attacker.faction == player_faction;
 
     if timing_bar.is_none() {
-        *timing_bar = Some(TimingBar::new(rl));
+        *timing_bar = Some(TimingBar::new(rl, conditions.side(player_is_attacker)));
     }
 
     let bar = timing_bar.as_mut().unwrap();

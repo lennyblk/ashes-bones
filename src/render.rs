@@ -1,7 +1,9 @@
 use crate::animation::Animation;
 use crate::assets::Assets;
 use crate::cursor::CursorType;
+use crate::duel::{DuelConditions, DuelSide};
 use crate::game_mode::{GameMode, TurnPhase};
+use crate::grid::DuelPreview;
 use crate::map::TileMap;
 use crate::minigame::{TimingBar, TimingResult};
 use crate::screens::winfo;
@@ -202,7 +204,7 @@ pub fn draw_guide_screen(
     let mut y = panel.y + 30.0;
     for line in lines {
         d.draw_text_ex(
-            &assets.hud_font,
+            &assets.info_font,
             line,
             Vector2::new(panel.x + 30.0, y),
             line_size,
@@ -500,6 +502,8 @@ pub fn draw_grid_screen(
     mouse_position: Vector2,
     selected_unit: Option<&Unit>,
     inspected_enemy: Option<&Unit>,
+    duel_preview: Option<&DuelPreview>,
+    position_scores: &[((i32, i32), i32)],
 ) {
     d.clear_background(Color::BEIGE);
     tile_map.draw(d);
@@ -597,6 +601,11 @@ pub fn draw_grid_screen(
         }
     }
 
+    draw_position_scores(d, assets, position_scores);
+    if let Some(preview) = duel_preview {
+        draw_duel_preview(d, assets, units, preview);
+    }
+
     if let Some(unit) = selected_unit {
         draw_unit_info(d, assets, unit, winfo::panel_rect());
     }
@@ -645,32 +654,33 @@ pub fn draw_grid_screen(
 /// petite fenêtre de stats à côté du perso sélectionné
 fn draw_unit_info(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit, rect: Rectangle) {
     d.draw_rectangle_rec(rect, Color::new(30, 30, 30, 220));
-    d.draw_rectangle_lines_ex(rect, 2.0, Color::WHITE);
+    let s = winfo::SCALE;
+    d.draw_rectangle_lines_ex(rect, 2.0 * s, Color::WHITE);
 
-    let pad = 6.0;
+    let pad = 6.0 * s;
     let x = rect.x + pad;
     let mut y = rect.y + pad;
 
     d.draw_text_ex(
-        &assets.hud_font,
+        &assets.info_font,
         &unit.name,
         Vector2::new(x, y),
-        16.0,
+        16.0 * s,
         1.0,
         Color::WHITE,
     );
-    y += 18.0;
+    y += 18.0 * s;
 
     ui::draw_health_bar(
         d,
         x,
         y,
         winfo::WIDTH - 2.0 * pad,
-        6.0,
+        6.0 * s,
         unit.hp_points,
         unit.hp_max_points,
     );
-    y += 10.0;
+    y += 10.0 * s;
 
     let lines = [
         format!("HP {}/{}", unit.hp_points, unit.hp_max_points),
@@ -682,14 +692,14 @@ fn draw_unit_info(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit, rect: 
     ];
     for line in &lines {
         d.draw_text_ex(
-            &assets.hud_font,
+            &assets.info_font,
             line,
             Vector2::new(x, y),
-            14.0,
+            14.0 * s,
             1.0,
             Color::WHITE,
         );
-        y += 15.0;
+        y += 15.0 * s;
     }
 }
 
@@ -704,6 +714,8 @@ pub fn draw_combat_screen(
     defender_combat_x: f32,
     timing_bar: Option<&TimingBar>,
     result_display: Option<&(TimingResult, f32, f32)>,
+    conditions: &DuelConditions,
+    player_is_attacker: bool,
 ) {
     draw_fullscreen_texture(d, &assets.combat_screen_background_texture);
 
@@ -787,6 +799,8 @@ pub fn draw_combat_screen(
     // MiniGame -----------------------------------------------------------------
     if let Some(bar) = timing_bar {
         draw_timing_bar(d, bar);
+        draw_bar_lives(d, assets, bar);
+        draw_combat_factors(d, assets, conditions, player_is_attacker);
     }
     if let Some((result, _, multiplier)) = result_display {
         // _ c'est le "time_left" qu'on a pas besoin d'utiliser ici
@@ -899,4 +913,275 @@ fn draw_timing_result(
         1.0,
         color,
     );
+}
+
+// preview du duel ------------------------------------------------------------
+
+const GOOD_FOR_ME: Color = Color::new(120, 230, 120, 255);
+const BAD_FOR_ME: Color = Color::new(255, 110, 110, 255);
+const MUTED: Color = Color::new(180, 180, 180, 255);
+// taille globale des fenêtres de preview (panneau, badges, facteurs en combat)
+const PREVIEW_SCALE: f32 = 1.6;
+
+fn score_color(score: i32) -> Color {
+    match score {
+        s if s > 0 => GOOD_FOR_ME,
+        s if s < 0 => BAD_FOR_ME,
+        _ => Color::WHITE,
+    }
+}
+
+/// petit badge +2 / -1 dans le coin de chaque case d'attaque possible
+fn draw_position_scores(
+    d: &mut RaylibDrawHandle,
+    assets: &Assets,
+    position_scores: &[((i32, i32), i32)],
+) {
+    for ((x, y), score) in position_scores {
+        let text = if *score > 0 {
+            format!("+{}", score)
+        } else {
+            score.to_string()
+        };
+        let font_size = 14.0 * PREVIEW_SCALE;
+        let size = assets.info_font.measure_text(&text, font_size, 1.0);
+        let rect = Rectangle::new(
+            (x * TILE_SIZE) as f32 + 2.0,
+            (y * TILE_SIZE) as f32 + 2.0,
+            size.x + 6.0 * PREVIEW_SCALE,
+            size.y + 2.0 * PREVIEW_SCALE,
+        );
+        d.draw_rectangle_rec(rect, Color::new(20, 20, 20, 200));
+        d.draw_text_ex(
+            &assets.info_font,
+            &text,
+            Vector2::new(rect.x + 3.0 * PREVIEW_SCALE, rect.y + PREVIEW_SCALE),
+            font_size,
+            1.0,
+            score_color(*score),
+        );
+    }
+}
+
+/// mini barre de timing : zone jaune + parfait vert, à l'échelle de la vraie
+fn draw_mini_bar(d: &mut RaylibDrawHandle, x: f32, y: f32, width: f32, side: &DuelSide) {
+    let h = (8.0 * PREVIEW_SCALE) as i32;
+    d.draw_rectangle(x as i32, y as i32, width as i32, h, Color::DARKGRAY);
+    let zone_x = x + width / 2.0 - side.zone_width * width / 2.0;
+    d.draw_rectangle(
+        zone_x as i32,
+        y as i32,
+        (side.zone_width * width) as i32,
+        h,
+        Color::YELLOW,
+    );
+    let perfect_x = x + width / 2.0 - side.perfect_width * width / 2.0;
+    d.draw_rectangle(
+        perfect_x as i32,
+        y as i32,
+        (side.perfect_width * width).ceil() as i32,
+        h,
+        Color::GREEN,
+    );
+}
+
+fn side_summary(side: &DuelSide) -> String {
+    format!(
+        "zone {}%  perfect {}%  speed x{:.1}  lives {}",
+        (side.zone_width * 100.0).round(),
+        (side.perfect_width * 100.0).round(),
+        side.speed,
+        side.lives
+    )
+}
+
+/// panneau en haut à gauche : dégâts prévus, barres des deux camps, facteurs de placement
+fn draw_duel_preview(
+    d: &mut RaylibDrawHandle,
+    assets: &Assets,
+    units: &[Unit],
+    preview: &DuelPreview,
+) {
+    let attacker = &units[preview.attacker_idx];
+    let defender = &units[preview.defender_idx];
+    let c = &preview.conditions;
+
+    // marque la case d'où partirait l'attaque si on doit bouger
+    if preview.from != (attacker.grid_x, attacker.grid_y) {
+        d.draw_rectangle_lines_ex(
+            Rectangle::new(
+                (preview.from.0 * TILE_SIZE) as f32,
+                (preview.from.1 * TILE_SIZE) as f32,
+                TILE_SIZE as f32,
+                TILE_SIZE as f32,
+            ),
+            3.0,
+            Color::WHITE,
+        );
+    }
+
+    let damage = |mult: f32| (c.base_damage as f32 * mult) as i32;
+    let (bad, good, perfect) = (damage(0.5), damage(1.0), damage(1.5));
+    let hp = defender.hp_points;
+    let (ko_text, ko_color) = if hp - bad <= 0 {
+        ("sure KO", Color::GOLD)
+    } else if hp - good <= 0 {
+        ("KO on GOOD", Color::GOLD)
+    } else if hp - perfect <= 0 {
+        ("KO on PERFECT", Color::ORANGE)
+    } else {
+        ("no KO", MUTED)
+    };
+
+    let mut lines: Vec<(String, Color)> = vec![
+        (
+            format!(
+                "{} -> {}{}",
+                attacker.name,
+                defender.name,
+                if preview.from_best_tile {
+                    "  (best tile)"
+                } else {
+                    ""
+                }
+            ),
+            Color::WHITE,
+        ),
+        (
+            format!("DMG  bad {}  good {}  perfect {}", bad, good, perfect),
+            Color::WHITE,
+        ),
+        (
+            format!(
+                "{} HP {} -> {} (good)   {}",
+                defender.name,
+                hp,
+                (hp - good).max(0),
+                ko_text
+            ),
+            ko_color,
+        ),
+    ];
+    let bars_y_index = lines.len();
+    lines.push((
+        format!("You    {}", side_summary(&c.attacker)),
+        Color::WHITE,
+    ));
+    lines.push((format!("Them   {}", side_summary(&c.defender)), MUTED));
+    if c.factors.is_empty() {
+        lines.push((String::from("No positional modifiers"), MUTED));
+    }
+    for factor in &c.factors {
+        let (sign, color) = if factor.favors_attacker {
+            ("+ ", GOOD_FOR_ME)
+        } else {
+            ("- ", BAD_FOR_ME)
+        };
+        lines.push((format!("{}{}", sign, factor.label), color));
+    }
+
+    let font_size = 15.0 * PREVIEW_SCALE;
+    let line_height = 17.0 * PREVIEW_SCALE;
+    let mini_bar_height = 11.0 * PREVIEW_SCALE;
+    let mini_bar_width = 160.0 * PREVIEW_SCALE;
+    let pad = 8.0 * PREVIEW_SCALE;
+    // largeur calée sur la ligne la plus longue
+    let widest_line = lines
+        .iter()
+        .map(|(text, _)| assets.info_font.measure_text(text, font_size, 1.0).x)
+        .fold(mini_bar_width, f32::max);
+    let width = widest_line + pad * 2.0;
+    let height = pad * 2.0 + lines.len() as f32 * line_height + 2.0 * mini_bar_height;
+    // côté opposé à la cible pour pas cacher le combat, sous la bannière de tour à droite
+    let panel = if defender.grid_x * TILE_SIZE < SCREEN_WIDTH / 2 {
+        Rectangle::new(SCREEN_WIDTH as f32 - width - 10.0, 84.0, width, height)
+    } else {
+        Rectangle::new(10.0, 10.0, width, height)
+    };
+    d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 225));
+    d.draw_rectangle_lines_ex(panel, 2.0 * PREVIEW_SCALE, score_color(c.score()));
+
+    let x = panel.x + pad;
+    let mut y = panel.y + pad;
+    for (i, (text, color)) in lines.iter().enumerate() {
+        d.draw_text_ex(
+            &assets.info_font,
+            text,
+            Vector2::new(x, y),
+            font_size,
+            1.0,
+            *color,
+        );
+        y += line_height;
+        // une mini barre sous chaque ligne "You" / "Them"
+        if i == bars_y_index || i == bars_y_index + 1 {
+            let side = if i == bars_y_index {
+                &c.attacker
+            } else {
+                &c.defender
+            };
+            draw_mini_bar(d, x, y, mini_bar_width, side);
+            y += mini_bar_height;
+        }
+    }
+}
+
+// combat : vies + rappel des facteurs ------------------------------------------
+
+fn draw_bar_lives(d: &mut RaylibDrawHandle, assets: &Assets, bar: &TimingBar) {
+    let bar_x = SCREEN_WIDTH as f32 / 2.0 - 200.0;
+    let bar_y = SCREEN_HEIGHT as f32 - 120.0;
+    for i in 0..bar.lives {
+        d.draw_rectangle(
+            (bar_x - 22.0 - i as f32 * 18.0) as i32,
+            (bar_y + 8.0) as i32,
+            14,
+            14,
+            Color::RED,
+        );
+    }
+    if bar.saved_timer > 0.0 {
+        let text = "SAVED!";
+        let size = assets.info_font.measure_text(text, 28.0, 1.0);
+        d.draw_text_ex(
+            &assets.info_font,
+            text,
+            Vector2::new(SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0, bar_y - 40.0),
+            28.0,
+            1.0,
+            Color::ORANGE,
+        );
+    }
+}
+
+fn draw_combat_factors(
+    d: &mut RaylibDrawHandle,
+    assets: &Assets,
+    conditions: &DuelConditions,
+    player_is_attacker: bool,
+) {
+    let font_size = 16.0 * PREVIEW_SCALE;
+    let line_height = 18.0 * PREVIEW_SCALE;
+    let mut y = SCREEN_HEIGHT as f32 - 20.0 - conditions.factors.len() as f32 * line_height;
+    for factor in &conditions.factors {
+        let good_for_me = factor.favors_attacker == player_is_attacker;
+        let (sign, color) = if good_for_me {
+            ("+ ", GOOD_FOR_ME)
+        } else {
+            ("- ", BAD_FOR_ME)
+        };
+        let text = format!("{}{}", sign, factor.label);
+        let size = assets.info_font.measure_text(&text, font_size, 1.0);
+        let rect = Rectangle::new(16.0, y - 1.0, size.x + 8.0 * PREVIEW_SCALE, line_height);
+        d.draw_rectangle_rec(rect, Color::new(20, 20, 20, 190));
+        d.draw_text_ex(
+            &assets.info_font,
+            &text,
+            Vector2::new(16.0 + 4.0 * PREVIEW_SCALE, y),
+            font_size,
+            1.0,
+            color,
+        );
+        y += line_height;
+    }
 }

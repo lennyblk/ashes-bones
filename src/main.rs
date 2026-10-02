@@ -4,6 +4,7 @@ mod animation;
 mod assets;
 mod combat;
 mod cursor;
+mod duel;
 mod game;
 mod game_mode;
 mod grid;
@@ -217,6 +218,8 @@ fn main() {
                     game.defender_combat_x,
                     game.timing_bar.as_ref(),
                     game.result_display.as_ref(),
+                    &game.duel_conditions,
+                    game.units[attacker_idx].faction == game.player_faction,
                 );
             }
         } else {
@@ -240,6 +243,8 @@ fn main() {
                 mouse_position,
                 game.selected_unit.map(|i| &game.units[i]),
                 game.inspected_enemy.map(|i| &game.units[i]),
+                highlights.duel_preview.as_ref(),
+                &highlights.position_scores,
             );
         }
     }

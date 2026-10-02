@@ -2,6 +2,7 @@ use raylib::prelude::*;
 
 use crate::animation::Animation;
 use crate::assets::Assets;
+use crate::duel::{self, DuelConditions};
 use crate::game::Game;
 use crate::game_mode::GameMode;
 use crate::minigame;
@@ -201,7 +202,21 @@ pub fn update(game: &mut Game, assets: &mut Assets, rl: &RaylibHandle, delta_tim
             .position(|u| u.state == UnitState::Attacking || u.state == UnitState::Healing)
         {
             if let Some(action) = game.units[attacker_idx].pending_action {
-                game.active_combat = Some((attacker_idx, action.target_idx()));
+                let target_idx = action.target_idx();
+                game.active_combat = Some((attacker_idx, target_idx));
+                // le placement est figé maintenant : il décide des conditions du minigame
+                game.duel_conditions = match action {
+                    PendingAction::Attack(_) => {
+                        let attacker = &game.units[attacker_idx];
+                        duel::compute(
+                            &game.units,
+                            attacker_idx,
+                            (attacker.grid_x, attacker.grid_y),
+                            target_idx,
+                        )
+                    }
+                    PendingAction::Heal(_) => DuelConditions::neutral(),
+                };
             }
         }
     }
@@ -282,6 +297,7 @@ pub fn update(game: &mut Game, assets: &mut Assets, rl: &RaylibHandle, delta_tim
                 defender,
                 game.player_faction,
                 &mut game.timing_bar,
+                &game.duel_conditions,
                 &mut game.damage_multiplier,
                 rl,
                 delta_time,

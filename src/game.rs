@@ -1,5 +1,6 @@
 use raylib::prelude::*;
 
+use crate::duel::DuelConditions;
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::minigame::{TimingBar, TimingResult};
 use crate::unit::{Faction, Unit, UnitClass, UnitState};
@@ -34,6 +35,8 @@ pub struct Game {
     pub combat_exit_pause_timer: f32,
     pub attack_animation_started: bool,
 
+    // conditions du duel en cours, figées au lancement du combat (placement sur la grille)
+    pub duel_conditions: DuelConditions,
     pub timing_bar: Option<TimingBar>,
     pub damage_multiplier: f32,
     pub result_display: Option<(TimingResult, f32, f32)>, // alert qui pop au resultat du minigame
@@ -65,6 +68,7 @@ impl Game {
             combat_exit_pause_timer: 0.0,
             attack_animation_started: false,
 
+            duel_conditions: DuelConditions::neutral(),
             timing_bar: None,
             damage_multiplier: 1.0,
             result_display: None,
@@ -78,6 +82,8 @@ impl Game {
         self.current_turn = TurnPhase::PlayerTurn;
         self.enemy_turn_delay = 0.0;
         self.active_combat = None;
+        self.duel_conditions = DuelConditions::neutral();
+        self.timing_bar = None;
         self.attack_animation_started = false;
         self.combat_entering_timer = 0.0;
         self.combat_ready_timer = 0.0;

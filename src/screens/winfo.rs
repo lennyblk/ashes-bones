@@ -3,8 +3,9 @@ use crate::ui::HudRects;
 use raylib::prelude::*;
 
 // petite fenêtre de stats du perso sélectionné (dessinée dans render.rs)
-pub const WIDTH: f32 = 130.0;
-pub const HEIGHT: f32 = 95.0;
+pub const SCALE: f32 = 1.6;
+pub const WIDTH: f32 = 130.0 * SCALE;
+pub const HEIGHT: f32 = 95.0 * SCALE;
 const MARGIN: f32 = 10.0;
 
 /// window fixe dans le coin en bas a gauche de l'écran (perso sélectionné)

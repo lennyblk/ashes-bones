@@ -57,6 +57,7 @@ pub struct Assets {
     pub combat_screen_background_texture: Texture2D,
     pub hud_font: Font,
     pub alert_font: Font,
+    pub info_font: Font,
     pub btn_end_turn: Texture2D,
     pub btn_wait: Texture2D,
     pub btn_exit: Texture2D,
@@ -624,6 +625,9 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .unwrap();
     let combat_screen_background_texture = rl
         .load_texture(thread, "assets/backgrounds/plains2.png")
+        .unwrap();
+    let info_font = rl
+        .load_font_ex(thread, "assets/fonts/JetBrainsMono-Regular.ttf", 96, None)
         .unwrap();
     let hud_font = rl
         .load_font_ex(thread, "assets/fonts/PixelParchment.ttf", 96, None)
@@ -1766,6 +1770,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         mouse_select_texture,
         combat_screen_background_texture,
         hud_font,
+        info_font,
         alert_font,
         btn_end_turn,
         btn_retry,
