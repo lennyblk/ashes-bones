@@ -34,6 +34,7 @@ pub fn update(game: &mut Game, rl: &RaylibHandle, hud: &HudRects, mouse_position
     if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_guide) {
         game.guide_return_to = GameMode::PauseScreen;
         game.game_mode = GameMode::GuideScreen;
+        game.guide_scroll = 0.0;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_play) {
         game.game_mode = game.paused_from;

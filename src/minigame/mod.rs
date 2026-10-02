@@ -10,7 +10,7 @@ use raylib::prelude::*;
 use timing::TimingBar;
 
 // temps max pour réussir un mini-jeu, après c'est BAD
-const TIME_LIMIT: f32 = 4.0;
+pub const TIME_LIMIT: f32 = 4.0;
 const SAVED_FLASH: f32 = 0.6;
 
 #[derive(Clone, Copy)]

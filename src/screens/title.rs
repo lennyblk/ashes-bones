@@ -25,6 +25,7 @@ pub fn update(
     if input::is_button_clicked(mouse_position, clicked, hud.btn_learn_title_screen) {
         game.guide_return_to = GameMode::TitleScreen;
         game.game_mode = GameMode::GuideScreen;
+        game.guide_scroll = 0.0;
         *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_play_title_screen) {

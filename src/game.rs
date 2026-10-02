@@ -19,6 +19,9 @@ pub struct Game {
     // écran auquel revenir en quittant le menu pause / le guide
     pub paused_from: GameMode,
     pub guide_return_to: GameMode,
+    // scroll du guide en pixels, et drag de sa scrollbar en cours
+    pub guide_scroll: f32,
+    pub guide_dragging: bool,
 
     pub current_turn: TurnPhase,
     pub enemy_turn_delay: f32,
@@ -54,6 +57,8 @@ impl Game {
             game_mode: GameMode::TitleScreen,
             paused_from: GameMode::GridScreen,
             guide_return_to: GameMode::TitleScreen,
+            guide_scroll: 0.0,
+            guide_dragging: false,
 
             current_turn: TurnPhase::PlayerTurn,
             enemy_turn_delay: 0.0,

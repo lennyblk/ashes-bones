@@ -205,7 +205,14 @@ fn main() {
         } else if game.game_mode == game_mode::GameMode::PauseScreen {
             render::draw_pause_screen(&mut d, &assets, &hud, mouse_position);
         } else if game.game_mode == game_mode::GameMode::GuideScreen {
-            render::draw_guide_screen(&mut d, &mut assets, delta_time, &hud, mouse_position);
+            render::draw_guide_screen(
+                &mut d,
+                &mut assets,
+                delta_time,
+                &hud,
+                mouse_position,
+                game.guide_scroll,
+            );
         } else if game.game_mode == game_mode::GameMode::CombatScreen {
             if let Some((attacker_idx, defender_idx)) = game.active_combat {
                 render::draw_combat_screen(

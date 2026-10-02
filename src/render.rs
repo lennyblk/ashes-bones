@@ -6,7 +6,7 @@ use crate::game_mode::{GameMode, TurnPhase};
 use crate::grid::DuelPreview;
 use crate::map::TileMap;
 use crate::minigame::{MiniGame, TimingResult};
-use crate::screens::winfo;
+use crate::screens::{guide, winfo};
 use crate::ui::{self, HudRects};
 use crate::unit::{Unit, UnitState};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE};
@@ -158,13 +158,17 @@ pub fn draw_guide_screen(
     delta_time: f32,
     hud: &HudRects,
     mouse_position: Vector2,
+    scroll: f32,
 ) {
     draw_fullscreen_texture(d, &assets.menu_background_texture);
 
     let title = "How to play";
     let title_size = 48.0;
     let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
-    let title_pos = Vector2::new(SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0, 40.0);
+    let title_pos = Vector2::new(
+        SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0,
+        guide::HEADER_HEIGHT / 2.0 - title_text_size.y / 2.0,
+    );
     d.draw_text_ex(
         &assets.hud_font,
         title,
@@ -182,45 +186,13 @@ pub fn draw_guide_screen(
         Color::WHITE,
     );
 
-    // panneau semi-transparent pour rester lisible sur le fond
-    let panel = Rectangle {
-        x: 220.0,
-        y: 130.0,
-        width: SCREEN_WIDTH as f32 - 440.0,
-        height: 300.0,
-    };
-    d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 190));
-    d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
-
-    let lines = [
-        "Left click a unit on your turn to select it",
-        "Left click a highlighted tile to move there",
-        "Left click an enemy in range to attack it",
-        "B cancels a move/attack in progress",
-        "Escape opens this pause menu during a match",
-        "Win by wiping out every enemy unit",
-    ];
-    let line_size = 22.0;
-    let mut y = panel.y + 30.0;
-    for line in lines {
-        d.draw_text_ex(
-            &assets.info_font,
-            line,
-            Vector2::new(panel.x + 30.0, y),
-            line_size,
-            1.0,
-            Color::WHITE,
-        );
-        y += line_size + 18.0;
-    }
-
-    // un perso de chaque camp qui vit un peu la scène, en idle
-    let sprite_size = 220.0;
-    let sprite_top = SCREEN_HEIGHT as f32 - sprite_size - 20.0;
+    let sprite_size = 190.0;
+    let sprite_top = guide::HEADER_HEIGHT / 2.0 - sprite_size / 2.0 + 10.0;
+    let sprite_offset = title_text_size.x / 2.0 + 90.0;
     draw_idle_card(
         d,
         &mut assets.cavalry.idle,
-        110.0,
+        SCREEN_WIDTH as f32 / 2.0 - sprite_offset,
         sprite_top,
         sprite_size,
         delta_time,
@@ -228,11 +200,45 @@ pub fn draw_guide_screen(
     draw_idle_card(
         d,
         &mut assets.necromancer.idle,
-        SCREEN_WIDTH as f32 - 110.0,
+        SCREEN_WIDTH as f32 / 2.0 + sprite_offset,
         sprite_top,
         sprite_size,
         delta_time,
     );
+
+    let panel = guide::panel_rect(hud);
+    d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 210));
+    d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
+
+    // contenu qui scrolle, coupé aux bords du panneau
+    {
+        let mut clip = d.begin_scissor_mode(
+            panel.x as i32,
+            panel.y as i32,
+            panel.width as i32,
+            panel.height as i32,
+        );
+        let x = panel.x + guide::PANEL_PAD;
+        let width = panel.width - guide::PANEL_PAD * 2.0 - guide::SCROLLBAR_WIDTH;
+        let mut y = panel.y + guide::PANEL_PAD - scroll;
+        for block in guide::content() {
+            let height = block.height();
+            // on ne dessine que ce qui est visible
+            if y + height >= panel.y && y <= panel.y + panel.height {
+                draw_guide_block(&mut clip, assets, &block, x, y, width);
+            }
+            y += height;
+        }
+    }
+
+    // scrollbar (seulement si tout ne tient pas dans le panneau)
+    if guide::max_scroll(hud) > 0.0 {
+        d.draw_rectangle_rec(guide::scrollbar_track(hud), Color::new(255, 255, 255, 40));
+        d.draw_rectangle_rec(
+            guide::scrollbar_thumb(hud, scroll),
+            Color::new(255, 255, 255, 170),
+        );
+    }
 
     ui::draw_text_button(d, &assets.hud_font, hud.btn_guide_back, "Back");
 
@@ -243,6 +249,219 @@ pub fn draw_guide_screen(
         0.7,
         Color::WHITE,
     );
+}
+
+fn draw_guide_block(
+    d: &mut impl RaylibDraw,
+    assets: &Assets,
+    block: &guide::Block,
+    x: f32,
+    y: f32,
+    width: f32,
+) {
+    match block {
+        guide::Block::Heading(title) => {
+            d.draw_text_ex(
+                &assets.hud_font,
+                title,
+                Vector2::new(x, y + 8.0),
+                guide::HEADING_SIZE,
+                1.0,
+                Color::GOLD,
+            );
+            d.draw_rectangle(
+                x as i32,
+                (y + 8.0 + guide::HEADING_SIZE + 2.0) as i32,
+                width as i32,
+                2,
+                Color::new(255, 203, 0, 120),
+            );
+        }
+        guide::Block::Text(line) => {
+            d.draw_text_ex(
+                &assets.info_font,
+                line,
+                Vector2::new(x, y),
+                guide::TEXT_SIZE,
+                1.0,
+                Color::WHITE,
+            );
+        }
+        guide::Block::Gap => {}
+        guide::Block::Diagram { rows, caption } => {
+            draw_guide_diagram(d, assets, rows, x, y);
+            let columns = rows
+                .iter()
+                .map(|row| row.chars().filter(|c| !c.is_whitespace()).count())
+                .max()
+                .unwrap_or(0);
+            // légendes alignées sur une même colonne (min 3 cases de large)
+            let caption_x = x + columns.max(3) as f32 * guide::DIAGRAM_CELL + 24.0;
+            for (i, line) in caption.iter().enumerate() {
+                d.draw_text_ex(
+                    &assets.info_font,
+                    line,
+                    Vector2::new(caption_x, y + 4.0 + i as f32 * 24.0),
+                    guide::CAPTION_SIZE,
+                    1.0,
+                    if i == 0 { Color::WHITE } else { guide::MUTED },
+                );
+            }
+        }
+        guide::Block::Bar {
+            window,
+            precision,
+            cursor,
+            lives,
+            caption,
+        } => {
+            let lives_space = 50.0;
+            let bar_x = x + lives_space;
+            let bar_y = y + 12.0;
+            let bar_width = 300.0;
+            let bar_height = 22.0;
+            d.draw_rectangle(
+                bar_x as i32,
+                bar_y as i32,
+                bar_width as i32,
+                bar_height as i32,
+                Color::DARKGRAY,
+            );
+            // zones centrées dans la barre d'exemple
+            let zone_x = bar_x + (0.5 - window / 2.0) * bar_width;
+            d.draw_rectangle(
+                zone_x as i32,
+                bar_y as i32,
+                (window * bar_width) as i32,
+                bar_height as i32,
+                Color::YELLOW,
+            );
+            let perfect_x = bar_x + (0.5 - precision / 2.0) * bar_width;
+            d.draw_rectangle(
+                perfect_x as i32,
+                bar_y as i32,
+                (precision * bar_width).ceil() as i32,
+                bar_height as i32,
+                Color::GREEN,
+            );
+            d.draw_rectangle(
+                (bar_x + cursor * bar_width) as i32 - 2,
+                bar_y as i32 - 4,
+                4,
+                bar_height as i32 + 8,
+                Color::WHITE,
+            );
+            for i in 0..*lives {
+                d.draw_rectangle(
+                    (bar_x - 20.0 - i as f32 * 16.0) as i32,
+                    (bar_y + 5.0) as i32,
+                    12,
+                    12,
+                    Color::RED,
+                );
+            }
+            d.draw_text_ex(
+                &assets.info_font,
+                caption,
+                Vector2::new(bar_x + bar_width + 20.0, bar_y + 1.0),
+                guide::CAPTION_SIZE,
+                1.0,
+                guide::MUTED,
+            );
+        }
+        guide::Block::Panel(lines) => {
+            let rect = Rectangle::new(
+                x,
+                y + 6.0,
+                width.min(560.0),
+                lines.len() as f32 * 22.0 + 16.0,
+            );
+            d.draw_rectangle_rec(rect, Color::new(10, 10, 10, 235));
+            d.draw_rectangle_lines_ex(rect, 2.0, guide::GOOD);
+            for (i, (line, color)) in lines.iter().enumerate() {
+                d.draw_text_ex(
+                    &assets.info_font,
+                    line,
+                    Vector2::new(rect.x + 10.0, rect.y + 8.0 + i as f32 * 22.0),
+                    17.0,
+                    1.0,
+                    *color,
+                );
+            }
+        }
+    }
+}
+
+/// mini grille du guide : jetons bleus pour ton camp, rouges pour l'ennemi,
+/// cases jaunes avec badge pour les choix de case
+fn draw_guide_diagram(d: &mut impl RaylibDraw, assets: &Assets, rows: &[&str], x: f32, y: f32) {
+    let cell = guide::DIAGRAM_CELL;
+    for (row_i, row) in rows.iter().enumerate() {
+        for (col_i, c) in row.chars().filter(|c| !c.is_whitespace()).enumerate() {
+            let rect = Rectangle::new(x + col_i as f32 * cell, y + row_i as f32 * cell, cell, cell);
+            d.draw_rectangle_rec(rect, Color::new(70, 95, 60, 255));
+            d.draw_rectangle_lines_ex(rect, 1.0, Color::new(0, 0, 0, 90));
+
+            let center = Vector2::new(rect.x + cell / 2.0, rect.y + cell / 2.0);
+            let token = match c {
+                'A' => Some((Color::new(70, 130, 255, 255), true)),
+                'a' => Some((Color::new(70, 130, 255, 255), false)),
+                'E' => Some((Color::new(220, 60, 60, 255), true)),
+                'e' => Some((Color::new(220, 60, 60, 255), false)),
+                _ => None,
+            };
+            if let Some((color, main)) = token {
+                d.draw_circle_v(center, cell * 0.38, color);
+                if main {
+                    d.draw_ring(
+                        center,
+                        cell * 0.38,
+                        cell * 0.38 + 3.0,
+                        0.0,
+                        360.0,
+                        24,
+                        Color::WHITE,
+                    );
+                }
+                let label = c.to_string();
+                let size = assets.info_font.measure_text(&label, 18.0, 1.0);
+                d.draw_text_ex(
+                    &assets.info_font,
+                    &label,
+                    Vector2::new(center.x - size.x / 2.0, center.y - size.y / 2.0),
+                    18.0,
+                    1.0,
+                    Color::WHITE,
+                );
+            }
+
+            let badge = match c {
+                '2' => Some(("+2", guide::GOOD)),
+                '1' => Some(("+1", guide::GOOD)),
+                '0' => Some(("0", Color::WHITE)),
+                'n' => Some(("-1", guide::BAD)),
+                _ => None,
+            };
+            if let Some((label, color)) = badge {
+                d.draw_rectangle_rec(rect, Color::new(255, 255, 0, 170));
+                d.draw_rectangle(
+                    rect.x as i32 + 2,
+                    rect.y as i32 + 2,
+                    22,
+                    16,
+                    Color::new(20, 20, 20, 200),
+                );
+                d.draw_text_ex(
+                    &assets.info_font,
+                    label,
+                    Vector2::new(rect.x + 5.0, rect.y + 2.0),
+                    15.0,
+                    1.0,
+                    color,
+                );
+            }
+        }
+    }
 }
 
 fn draw_fullscreen_texture(d: &mut RaylibDrawHandle, texture: &Texture2D) {

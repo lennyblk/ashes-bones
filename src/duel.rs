@@ -1,29 +1,26 @@
 use crate::combat::attack_damage_dealt;
 use crate::unit::Unit;
 
-// réglages de base des mini-jeux, modifiés ensuite par le placement sur la grille
 pub const BASE_WINDOW: f32 = 0.2;
 pub const BASE_PRECISION: f32 = 0.03;
-const MIN_WINDOW: f32 = 0.06;
-const MAX_WINDOW: f32 = 0.45;
-const MAX_LIVES: u8 = 2;
+pub const MIN_WINDOW: f32 = 0.06;
+pub const MAX_WINDOW: f32 = 0.45;
+pub const MAX_LIVES: u8 = 2;
 
-const FLANK_WINDOW: f32 = 0.04; // par allié qui encercle (max 3)
-const GUARD_WINDOW: f32 = 0.03; // par allié qui garde le défenseur (max 2)
-const PRECISION_BONUS: f32 = 0.03;
-const SHOOTER_IN_MELEE_WINDOW: f32 = 0.04;
+pub const FLANK_WINDOW: f32 = 0.04;
+pub const MAX_FLANKERS: usize = 3;
+pub const GUARD_WINDOW: f32 = 0.03;
+pub const PRECISION_BONUS: f32 = 0.03;
+pub const SHOOTER_IN_MELEE_WINDOW: f32 = 0.04;
+pub const AIMED_TEMPO: f32 = 0.8;
+pub const MELEE_PANIC_TEMPO: f32 = 1.3;
+pub const DESPERATE_HP_PCT: i32 = 30;
 
-/// réglages de difficulté d'un camp du duel. Génériques : chaque mini-jeu les traduit
-/// à sa façon (zone de la barre, rayon d'une cible, temps par touche...)
 #[derive(Clone, Copy, Debug)]
 pub struct DuelSide {
-    // marge d'erreur pour réussir (0..1), ex : largeur de la zone jaune
     pub window: f32,
-    // marge pour un PERFECT, toujours <= window, ex : largeur de la zone verte
     pub precision: f32,
-    // multiplicateur de vitesse du mini-jeu (curseur, cible, rythme...)
     pub tempo: f32,
-    // ratés pardonnés
     pub lives: u8,
 }
 
@@ -57,7 +54,6 @@ pub struct DuelConditions {
     pub attacker: DuelSide,
     pub defender: DuelSide,
     pub factors: Vec<Factor>,
-    // dégâts avant le multiplicateur du minigame
     pub base_damage: i32,
 }
 
@@ -99,11 +95,9 @@ fn pct(value: f32) -> i32 {
 }
 
 fn is_desperate(unit: &Unit) -> bool {
-    unit.hp_points * 10 <= unit.hp_max_points * 3
+    unit.hp_points * 100 <= unit.hp_max_points * DESPERATE_HP_PCT
 }
 
-/// conditions du duel si `attacker_idx` attaque `defender_idx` depuis la case `from`.
-/// `from` peut différer de la position actuelle de l'attaquant (preview avant déplacement)
 pub fn compute(
     units: &[Unit],
     attacker_idx: usize,
@@ -129,7 +123,7 @@ pub fn compute(
     let flankers = others(attacker.faction)
         .filter(|(_, u)| distance((u.grid_x, u.grid_y), defender_pos) == 1)
         .count()
-        .min(3) as f32;
+        .min(MAX_FLANKERS) as f32;
     if flankers > 0.0 {
         att.window += FLANK_WINDOW * flankers;
         def.window -= FLANK_WINDOW * flankers;
@@ -195,9 +189,9 @@ pub fn compute(
     // tireurs : à distance on vise posé, au contact c'est la panique
     if attacker.attack_range >= 2 {
         if dist >= 2 {
-            att.tempo *= 0.8;
+            att.tempo *= AIMED_TEMPO;
             factors.push(Factor {
-                label: String::from("Aimed shot: tempo -20%"),
+                label: format!("Aimed shot: tempo -{}%", pct(1.0 - AIMED_TEMPO)),
                 favors_attacker: true,
             });
         } else {
@@ -210,11 +204,12 @@ pub fn compute(
     }
     if defender.attack_range >= 2 && dist == 1 {
         def.window -= SHOOTER_IN_MELEE_WINDOW;
-        def.tempo *= 1.3;
+        def.tempo *= MELEE_PANIC_TEMPO;
         factors.push(Factor {
             label: format!(
-                "Caught in melee: their window -{}%, tempo +30%",
-                pct(SHOOTER_IN_MELEE_WINDOW)
+                "Caught in melee: their window -{}%, tempo +{}%",
+                pct(SHOOTER_IN_MELEE_WINDOW),
+                pct(MELEE_PANIC_TEMPO - 1.0)
             ),
             favors_attacker: true,
         });
