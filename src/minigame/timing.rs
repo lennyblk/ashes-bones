@@ -62,11 +62,18 @@ impl TimingBar {
         })
     }
 
+    pub fn area(&self) -> Rectangle {
+        Rectangle {
+            x: SCREEN_WIDTH as f32 / 2.0 - 200.0,
+            y: SCREEN_HEIGHT as f32 - 120.0,
+            width: 400.0,
+            height: 30.0,
+        }
+    }
+
     pub fn draw(&self, d: &mut RaylibDrawHandle) {
-        let bar_x = SCREEN_WIDTH as f32 / 2.0 - 200.0;
-        let bar_y = SCREEN_HEIGHT as f32 - 120.0;
-        let bar_width = 400.0;
-        let bar_height = 30.0;
+        let area = self.area();
+        let (bar_x, bar_y, bar_width, bar_height) = (area.x, area.y, area.width, area.height);
 
         // fond de la barre
         d.draw_rectangle(

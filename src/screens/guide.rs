@@ -113,6 +113,11 @@ pub fn content() -> Vec<Block> {
             "You have {} seconds. No click in time = BAD.",
             TIME_LIMIT as i32
         )),
+        text("You play the minigame of the unit YOU control, even on defense."),
+        text("Longbowman: shoot the moving target with the crosshair."),
+        text("  yellow ring = GOOD, green center = PERFECT, outside = miss."),
+        text("  Window = target size, precision = center size,"),
+        text("  tempo = how fast the target moves."),
         Block::Gap,
         heading("Duel conditions"),
         text("Where your units stand shapes the minigame BEFORE it starts."),

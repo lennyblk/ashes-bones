@@ -151,25 +151,43 @@ fn place_unit(unit: &mut Unit, grid_x: i32, grid_y: i32) {
     unit.screen_y = grid_to_screen_y(grid_y);
 }
 
-/// pioche une case libre (pas bloquée par la map, pas déjà prise) dans une plage de colonnes
-fn random_open_tile(
-    rl: &RaylibHandle,
-    blocked_tiles: &[(i32, i32)],
-    taken_tiles: &[(i32, i32)],
-    x_min: i32,
-    x_max: i32,
-) -> (i32, i32) {
-    loop {
-        let x = rl.get_random_value::<i32>(x_min..=x_max);
-        let y = rl.get_random_value::<i32>(0..=GRID_ROWS - 1);
-        if !blocked_tiles.contains(&(x, y)) && !taken_tiles.contains(&(x, y)) {
-            return (x, y);
+/// cases libres où un camp peut apparaître : la plus grande zone de terre d'un seul
+/// tenant dans ses colonnes. Écarte les îlots coupés par l'eau où une unité serait coincée
+fn spawn_area(blocked_tiles: &[(i32, i32)], x_min: i32, x_max: i32) -> Vec<(i32, i32)> {
+    let is_open = |x: i32, y: i32| {
+        x >= x_min && x <= x_max && y >= 0 && y < GRID_ROWS && !blocked_tiles.contains(&(x, y))
+    };
+    let mut seen: Vec<(i32, i32)> = Vec::new();
+    let mut biggest: Vec<(i32, i32)> = Vec::new();
+    for start_x in x_min..=x_max {
+        for start_y in 0..GRID_ROWS {
+            if !is_open(start_x, start_y) || seen.contains(&(start_x, start_y)) {
+                continue;
+            }
+            // remplissage (flood fill) de la zone qui contient cette case
+            let mut zone = vec![(start_x, start_y)];
+            seen.push((start_x, start_y));
+            let mut i = 0;
+            while i < zone.len() {
+                let (x, y) = zone[i];
+                for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                    if is_open(nx, ny) && !seen.contains(&(nx, ny)) {
+                        seen.push((nx, ny));
+                        zone.push((nx, ny));
+                    }
+                }
+                i += 1;
+            }
+            if zone.len() > biggest.len() {
+                biggest = zone;
+            }
         }
     }
+    biggest
 }
 
-/// gauche de la rivière (colonnes 11-12), undead à droite, un humain sur la petite
-/// île en haut à gauche. Appelée à chaque vrai début de partie (pas juste au lancement)
+/// humains à gauche de la rivière (colonnes 11-12), undead à droite, placés au hasard.
+/// Appelée à chaque vrai début de partie (pas juste au lancement)
 #[rustfmt::skip]
 fn fresh_units(rl: &RaylibHandle, blocked_tiles: &[(i32, i32)]) -> Vec<Unit> {
     let mut units: Vec<Unit> = vec![
@@ -191,17 +209,18 @@ fn fresh_units(rl: &RaylibHandle, blocked_tiles: &[(i32, i32)]) -> Vec<Unit> {
     ];
 
     let river_x = 11;
-    let mut taken_tiles: Vec<(i32, i32)> = vec![(2, 2)];
-    place_unit(&mut units[0], 2, 2);
-    for unit in units.iter_mut().skip(1) {
-        let (x_min, x_max) = if unit.faction == Faction::Human {
-            (0, river_x - 1)
+    let mut human_tiles = spawn_area(blocked_tiles, 0, river_x - 1);
+    let mut undead_tiles = spawn_area(blocked_tiles, river_x + 2, GRID_COLS - 1);
+    for unit in units.iter_mut() {
+        let free_tiles = if unit.faction == Faction::Human {
+            &mut human_tiles
         } else {
-            (river_x + 2, GRID_COLS - 1)
+            &mut undead_tiles
         };
-        let tile = random_open_tile(rl, blocked_tiles, &taken_tiles, x_min, x_max);
+        // on retire la case tirée : deux unités ne peuvent pas tomber au même endroit
+        let pick = rl.get_random_value::<i32>(0..=free_tiles.len() as i32 - 1) as usize;
+        let tile = free_tiles.swap_remove(pick);
         place_unit(unit, tile.0, tile.1);
-        taken_tiles.push(tile);
     }
     units
 }

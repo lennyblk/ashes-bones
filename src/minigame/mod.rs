@@ -1,12 +1,14 @@
+mod target;
 mod timing;
 
+use crate::SCREEN_WIDTH;
 use crate::animation::Animation;
 use crate::assets::Assets;
 use crate::duel::{DuelConditions, DuelSide};
 use crate::unit::{Faction, PendingAction, Unit, UnitClass, UnitState};
-use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use raylib::prelude::*;
 
+use target::TargetShot;
 use timing::TimingBar;
 
 // temps max pour réussir un mini-jeu, après c'est BAD
@@ -43,6 +45,7 @@ pub enum Attempt {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum MiniGameKind {
     Timing,
+    Target,
 }
 
 impl MiniGameKind {
@@ -54,20 +57,21 @@ impl MiniGameKind {
             | UnitClass::Ghoul
             | UnitClass::Assassin
             | UnitClass::Wraith
-            | UnitClass::Longbowman
             | UnitClass::Mage
             | UnitClass::Banshee
             | UnitClass::BloodKnight
             | UnitClass::Priest
             | UnitClass::Necromancer => MiniGameKind::Timing,
+            UnitClass::Longbowman => MiniGameKind::Target,
         }
     }
 }
 
 /// la mécanique propre à chaque mini-jeu. Pour en ajouter un : un fichier avec
-/// new(rl, side) / update(rl, dt) -> Option<Attempt> / draw(d), puis une variante ici
+/// new(rl, side) / update(rl, dt) -> Option<Attempt> / draw(d) / area(), puis une variante ici
 enum Mechanic {
     Timing(TimingBar),
+    Target(TargetShot),
 }
 
 /// partie commune à tous les mini-jeux : chrono, vies, résultat final
@@ -84,6 +88,7 @@ impl MiniGame {
     pub fn new(kind: MiniGameKind, side: &DuelSide, rl: &RaylibHandle) -> MiniGame {
         let mechanic = match kind {
             MiniGameKind::Timing => Mechanic::Timing(TimingBar::new(rl, side)),
+            MiniGameKind::Target => Mechanic::Target(TargetShot::new(rl, side)),
         };
         MiniGame {
             mechanic,
@@ -102,6 +107,7 @@ impl MiniGame {
 
         let attempt = match &mut self.mechanic {
             Mechanic::Timing(bar) => bar.update(rl, delta_time),
+            Mechanic::Target(target) => target.update(rl, delta_time),
         };
         match attempt {
             Some(Attempt::Hit(result)) => self.result = Some(result),
@@ -120,20 +126,26 @@ impl MiniGame {
     }
 
     pub fn draw(&self, d: &mut RaylibDrawHandle, assets: &Assets) {
-        match &self.mechanic {
-            Mechanic::Timing(bar) => bar.draw(d),
-        }
-        self.draw_lives(d, assets);
+        let area = match &self.mechanic {
+            Mechanic::Timing(bar) => {
+                bar.draw(d);
+                bar.area()
+            }
+            Mechanic::Target(target) => {
+                target.draw(d);
+                target.area()
+            }
+        };
+        self.draw_lives(d, assets, area);
     }
 
-    /// vies en carrés rouges + "SAVED!" : même place pour tous les mini-jeux
-    fn draw_lives(&self, d: &mut RaylibDrawHandle, assets: &Assets) {
-        let hud_x = SCREEN_WIDTH as f32 / 2.0 - 200.0;
-        let hud_y = SCREEN_HEIGHT as f32 - 120.0;
+    /// vies en carrés rouges à gauche de l'aire du mini-jeu, "SAVED!" au-dessus
+    fn draw_lives(&self, d: &mut RaylibDrawHandle, assets: &Assets, area: Rectangle) {
+        let middle_y = area.y + area.height / 2.0;
         for i in 0..self.lives {
             d.draw_rectangle(
-                (hud_x - 22.0 - i as f32 * 18.0) as i32,
-                (hud_y + 8.0) as i32,
+                (area.x - 22.0 - i as f32 * 18.0) as i32,
+                (middle_y - 7.0) as i32,
                 14,
                 14,
                 Color::RED,
@@ -145,7 +157,7 @@ impl MiniGame {
             d.draw_text_ex(
                 &assets.info_font,
                 text,
-                Vector2::new(SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0, hud_y - 40.0),
+                Vector2::new(SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0, area.y - 40.0),
                 28.0,
                 1.0,
                 Color::ORANGE,
