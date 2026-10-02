@@ -1,5 +1,6 @@
 use raylib::prelude::*;
 
+use crate::SCREEN_WIDTH;
 use crate::duel::{
     AIMED_TEMPO, BASE_PRECISION, BASE_WINDOW, DESPERATE_HP_PCT, FLANK_WINDOW, GUARD_WINDOW,
     MAX_FLANKERS, MAX_LIVES, MAX_WINDOW, MELEE_PANIC_TEMPO, MIN_WINDOW, PRECISION_BONUS,
@@ -10,7 +11,6 @@ use crate::game_mode::GameMode;
 use crate::input;
 use crate::minigame::TIME_LIMIT;
 use crate::ui::HudRects;
-use crate::SCREEN_WIDTH;
 
 // mise en page du guide (partagée entre update pour le scroll et render pour le dessin)
 pub const PANEL_PAD: f32 = 32.0;

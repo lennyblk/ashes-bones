@@ -168,8 +168,11 @@ pub fn update(
     if let Some(sel) = game.selected_unit {
         if game.units[sel].can_heal {
             let healer_faction = game.units[sel].faction;
-            if let Some(ally_idx) = game.units.iter().position(|u| {
-                u.faction == healer_faction
+            // pas soi-même : un soigneur blessé survolé se trouverait sinon comme cible,
+            // et two_mut(sel, sel) panique
+            if let Some(ally_idx) = game.units.iter().enumerate().position(|(i, u)| {
+                i != sel
+                    && u.faction == healer_faction
                     && u.is_alive()
                     && u.hp_points < u.hp_max_points
                     && u.grid_x == cursor_grid_x
