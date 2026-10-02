@@ -37,8 +37,6 @@ pub struct Assets {
     pub longbowman: AnimationSet,
     pub mage: AnimationSet,
     pub priest: AnimationSet,
-    pub priest_aura: Animation,
-    pub priest_aura_effect: Animation,
     pub priest_heal: Animation,
     pub priest_heal_effect: Animation,
     pub banshee: AnimationSet,
@@ -48,8 +46,6 @@ pub struct Assets {
     pub necromancer: AnimationSet,
     pub necromancer_attack2: Animation,
     pub necromancer_attack2_effect: Animation,
-    pub necromancer_attack3: Animation,
-    pub necromancer_attack3_effect: Animation,
     pub mouse_normal_texture: Texture2D,
     pub mouse_hover_texture: Texture2D,
     pub mouse_click_texture: Texture2D,
@@ -377,18 +373,6 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             "assets/humanChar/Human priest/Human priest/human_priest-Die.png",
         )
         .unwrap();
-    let priest_aura_texture = rl
-        .load_texture(
-            thread,
-            "assets/humanChar/Human priest/Human priest/human_priest-Aura.png",
-        )
-        .unwrap();
-    let priest_aura_effect_texture = rl
-        .load_texture(
-            thread,
-            "assets/humanChar/Human priest/Human priest effects/human_priest-Aura effect.png",
-        )
-        .unwrap();
     let priest_heal_texture = rl
         .load_texture(
             thread,
@@ -596,18 +580,6 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .load_texture(
             thread,
             "assets/undeadChar/Undead Necromancer 32x32/Undead Necromancer_Effects/Necromancer Effects-Attack 2.png",
-        )
-        .unwrap();
-    let necromancer_attack3_texture = rl
-        .load_texture(
-            thread,
-            "assets/undeadChar/Undead Necromancer 32x32/Undead Necromancer/Necromancer-Attack 3.png",
-        )
-        .unwrap();
-    let necromancer_attack3_effect_texture = rl
-        .load_texture(
-            thread,
-            "assets/undeadChar/Undead Necromancer 32x32/Undead Necromancer_Effects/Necromancer Effects-Attack 3.png",
         )
         .unwrap();
 
@@ -1260,32 +1232,6 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
                 looping: false,
             },
         },
-        priest_aura: Animation {
-            texture: priest_aura_texture,
-            frame_width: 130,
-            frame_height: 100,
-            frames_per_row: 9,
-            first: 0,
-            last: 8,
-            current: 0,
-            speed: 8.0,
-            duration_left: 0.1,
-            finished: false,
-            looping: false,
-        },
-        priest_aura_effect: Animation {
-            texture: priest_aura_effect_texture,
-            frame_width: 130,
-            frame_height: 100,
-            frames_per_row: 9,
-            first: 0,
-            last: 8,
-            current: 0,
-            speed: 8.0,
-            duration_left: 0.1,
-            finished: false,
-            looping: false,
-        },
         priest_heal: Animation {
             texture: priest_heal_texture,
             frame_width: 130,
@@ -1732,32 +1678,6 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
             frames_per_row: 9,
             first: 0,
             last: 8,
-            current: 0,
-            speed: 8.0,
-            duration_left: 0.1,
-            finished: false,
-            looping: false,
-        },
-        necromancer_attack3: Animation {
-            texture: necromancer_attack3_texture,
-            frame_width: 160,
-            frame_height: 160,
-            frames_per_row: 12,
-            first: 0,
-            last: 11,
-            current: 0,
-            speed: 8.0,
-            duration_left: 0.1,
-            finished: false,
-            looping: false,
-        },
-        necromancer_attack3_effect: Animation {
-            texture: necromancer_attack3_effect_texture,
-            frame_width: 162,
-            frame_height: 162,
-            frames_per_row: 12,
-            first: 0,
-            last: 11,
             current: 0,
             speed: 8.0,
             duration_left: 0.1,
