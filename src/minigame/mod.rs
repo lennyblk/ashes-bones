@@ -1,4 +1,5 @@
 mod charge;
+mod sequence;
 mod target;
 mod timing;
 
@@ -10,6 +11,7 @@ use crate::unit::{Faction, PendingAction, Unit, UnitClass, UnitState};
 use raylib::prelude::*;
 
 use charge::ChargeRing;
+use sequence::KeySequence;
 use target::TargetShot;
 use timing::TimingBar;
 
@@ -49,6 +51,7 @@ pub enum MiniGameKind {
     Timing,
     Target,
     Charge,
+    Sequence,
 }
 
 impl MiniGameKind {
@@ -56,8 +59,6 @@ impl MiniGameKind {
         match class {
             UnitClass::Soldier
             | UnitClass::Skeleton
-            | UnitClass::Assassin
-            | UnitClass::Wraith
             | UnitClass::Mage
             | UnitClass::Banshee
             | UnitClass::BloodKnight
@@ -65,6 +66,7 @@ impl MiniGameKind {
             | UnitClass::Necromancer => MiniGameKind::Timing,
             UnitClass::Longbowman => MiniGameKind::Target,
             UnitClass::Cavalry | UnitClass::Ghoul => MiniGameKind::Charge,
+            UnitClass::Assassin | UnitClass::Wraith => MiniGameKind::Sequence,
         }
     }
 }
@@ -75,6 +77,7 @@ enum Mechanic {
     Timing(TimingBar),
     Target(TargetShot),
     Charge(ChargeRing),
+    Sequence(KeySequence),
 }
 
 /// partie commune à tous les mini-jeux : chrono, vies, résultat final
@@ -93,6 +96,7 @@ impl MiniGame {
             MiniGameKind::Timing => Mechanic::Timing(TimingBar::new(rl, side)),
             MiniGameKind::Target => Mechanic::Target(TargetShot::new(rl, side)),
             MiniGameKind::Charge => Mechanic::Charge(ChargeRing::new(rl, side)),
+            MiniGameKind::Sequence => Mechanic::Sequence(KeySequence::new(rl, side)),
         };
         MiniGame {
             mechanic,
@@ -113,6 +117,7 @@ impl MiniGame {
             Mechanic::Timing(bar) => bar.update(rl, delta_time),
             Mechanic::Target(target) => target.update(rl, delta_time),
             Mechanic::Charge(ring) => ring.update(rl, delta_time),
+            Mechanic::Sequence(sequence) => sequence.update(rl, delta_time),
         };
         match attempt {
             Some(Attempt::Hit(result)) => self.result = Some(result),
@@ -143,6 +148,10 @@ impl MiniGame {
             Mechanic::Charge(ring) => {
                 ring.draw(d);
                 ring.area()
+            }
+            Mechanic::Sequence(sequence) => {
+                sequence.draw(d);
+                sequence.area()
             }
         };
         self.draw_lives(d, assets, area);
