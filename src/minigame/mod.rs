@@ -1,3 +1,4 @@
+mod charge;
 mod target;
 mod timing;
 
@@ -8,6 +9,7 @@ use crate::duel::{DuelConditions, DuelSide};
 use crate::unit::{Faction, PendingAction, Unit, UnitClass, UnitState};
 use raylib::prelude::*;
 
+use charge::ChargeRing;
 use target::TargetShot;
 use timing::TimingBar;
 
@@ -46,6 +48,7 @@ pub enum Attempt {
 pub enum MiniGameKind {
     Timing,
     Target,
+    Charge,
 }
 
 impl MiniGameKind {
@@ -53,8 +56,6 @@ impl MiniGameKind {
         match class {
             UnitClass::Soldier
             | UnitClass::Skeleton
-            | UnitClass::Cavalry
-            | UnitClass::Ghoul
             | UnitClass::Assassin
             | UnitClass::Wraith
             | UnitClass::Mage
@@ -63,6 +64,7 @@ impl MiniGameKind {
             | UnitClass::Priest
             | UnitClass::Necromancer => MiniGameKind::Timing,
             UnitClass::Longbowman => MiniGameKind::Target,
+            UnitClass::Cavalry | UnitClass::Ghoul => MiniGameKind::Charge,
         }
     }
 }
@@ -72,6 +74,7 @@ impl MiniGameKind {
 enum Mechanic {
     Timing(TimingBar),
     Target(TargetShot),
+    Charge(ChargeRing),
 }
 
 /// partie commune à tous les mini-jeux : chrono, vies, résultat final
@@ -89,6 +92,7 @@ impl MiniGame {
         let mechanic = match kind {
             MiniGameKind::Timing => Mechanic::Timing(TimingBar::new(rl, side)),
             MiniGameKind::Target => Mechanic::Target(TargetShot::new(rl, side)),
+            MiniGameKind::Charge => Mechanic::Charge(ChargeRing::new(rl, side)),
         };
         MiniGame {
             mechanic,
@@ -108,6 +112,7 @@ impl MiniGame {
         let attempt = match &mut self.mechanic {
             Mechanic::Timing(bar) => bar.update(rl, delta_time),
             Mechanic::Target(target) => target.update(rl, delta_time),
+            Mechanic::Charge(ring) => ring.update(rl, delta_time),
         };
         match attempt {
             Some(Attempt::Hit(result)) => self.result = Some(result),
@@ -134,6 +139,10 @@ impl MiniGame {
             Mechanic::Target(target) => {
                 target.draw(d);
                 target.area()
+            }
+            Mechanic::Charge(ring) => {
+                ring.draw(d);
+                ring.area()
             }
         };
         self.draw_lives(d, assets, area);

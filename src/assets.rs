@@ -64,18 +64,13 @@ pub struct Assets {
     pub btn_guide: Texture2D,
     pub banner_your_turn: Texture2D,
     pub banner_enemy_turn: Texture2D,
-    pub title_screen_background_texture_1: Texture2D,
-    pub title_screen_background_texture_2: Texture2D,
-    pub title_screen_background_texture_3: Texture2D,
-    pub title_screen_background_texture_4: Texture2D,
-    pub title_screen_background_texture_5: Texture2D,
     pub menu_background_texture: Texture2D,
     pub title_background_texture: Texture2D,
     pub btn_exit_title_screen: Texture2D,
     pub btn_play_title_screen: Texture2D,
+    pub btn_multi_title_screen: Texture2D,
     pub btn_settings_title_screen: Texture2D,
     pub btn_guide_title_screen: Texture2D,
-    pub title: Texture2D,
 }
 
 impl Assets {
@@ -639,21 +634,6 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
     let banner_enemy_turn = rl
         .load_texture(thread, "assets/turnbased-ui/banner_enemy_phase.png")
         .unwrap();
-    let title_screen_background_texture_1 = rl
-        .load_texture(thread, "assets/backgrounds/Pref/1.png")
-        .unwrap();
-    let title_screen_background_texture_2 = rl
-        .load_texture(thread, "assets/backgrounds/Pref/2.png")
-        .unwrap();
-    let title_screen_background_texture_3 = rl
-        .load_texture(thread, "assets/backgrounds/Pref/3.png")
-        .unwrap();
-    let title_screen_background_texture_4 = rl
-        .load_texture(thread, "assets/backgrounds/Pref/4.png")
-        .unwrap();
-    let title_screen_background_texture_5 = rl
-        .load_texture(thread, "assets/backgrounds/Pref/5.png")
-        .unwrap();
     let menu_background_texture = rl
         .load_texture(thread, "assets/backgrounds/plains1.png")
         .unwrap();
@@ -666,14 +646,14 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
     let btn_play_title_screen = rl
         .load_texture(thread, "assets/menu-ui/btn_play_normal.png")
         .unwrap();
+    let btn_multi_title_screen = rl
+        .load_texture(thread, "assets/menu-ui/btn_multiplayer_normal.png")
+        .unwrap();
     let btn_settings_title_screen = rl
         .load_texture(thread, "assets/menu-ui/btn_settings_normal.png")
         .unwrap();
     let btn_guide_title_screen = rl
         .load_texture(thread, "assets/menu-ui/btn_guide_normal.png")
-        .unwrap();
-    let title = rl
-        .load_texture(thread, "assets/menu-ui/title_ashes_bones.png")
         .unwrap();
     Assets {
         soldier: AnimationSet {
@@ -1706,17 +1686,12 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         btn_guide,
         banner_your_turn,
         banner_enemy_turn,
-        title_screen_background_texture_1,
-        title_screen_background_texture_2,
-        title_screen_background_texture_3,
-        title_screen_background_texture_4,
-        title_screen_background_texture_5,
         menu_background_texture,
         title_background_texture,
         btn_exit_title_screen,
         btn_play_title_screen,
+        btn_multi_title_screen,
         btn_settings_title_screen,
         btn_guide_title_screen,
-        title,
     }
 }

@@ -70,6 +70,11 @@ pub fn draw_title_screen(
     draw_texture_at(d, &assets.btn_play_title_screen, hud.btn_play_title_screen);
     draw_texture_at(
         d,
+        &assets.btn_multi_title_screen,
+        hud.btn_multi_title_screen,
+    );
+    draw_texture_at(
+        d,
         &assets.btn_settings_title_screen,
         hud.btn_settings_title_screen,
     );
