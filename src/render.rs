@@ -220,7 +220,7 @@ pub fn draw_guide_screen(
         for block in guide::content() {
             let height = block.height();
             // on ne dessine que ce qui est visible
-            if y + height >= panel.y && y <= panel.y + panel.height {
+            if y + block.draw_extent() >= panel.y && y <= panel.y + panel.height {
                 draw_guide_block(&mut clip, assets, &block, x, y, width);
             }
             y += height;
@@ -384,6 +384,15 @@ fn draw_guide_block(
                     *color,
                 );
             }
+        }
+        guide::Block::Illustration(kind) => {
+            let rect = Rectangle::new(
+                x + width - guide::ILLUSTRATION_WIDTH,
+                y,
+                guide::ILLUSTRATION_WIDTH,
+                guide::ILLUSTRATION_HEIGHT,
+            );
+            draw_guide_illustration(d, kind, rect);
         }
     }
 }
@@ -1357,4 +1366,224 @@ fn draw_combat_factors(
         );
         y += line_height;
     }
+}
+
+// illustrations des mini-jeux dans le guide ------------------------------------
+
+/// vue figée d'un mini-jeu dans un cadre, mêmes couleurs que le vrai jeu
+fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, rect: Rectangle) {
+    d.draw_rectangle_rec(rect, Color::new(10, 10, 10, 220));
+    d.draw_rectangle_lines_ex(rect, 2.0, Color::new(255, 255, 255, 90));
+    let center = Vector2::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+
+    match kind {
+        guide::Illustration::Target => {
+            // trajectoire en 8 en pointillés, la cible dessus, le viseur un peu à côté
+            for i in 0..48 {
+                let t = i as f32 / 48.0 * std::f32::consts::TAU;
+                let p = Vector2::new(
+                    center.x + 110.0 * (1.6 * t).sin(),
+                    center.y + 30.0 * (2.3 * t + 1.0).sin(),
+                );
+                d.draw_circle_v(p, 1.5, Color::new(255, 255, 255, 70));
+            }
+            let target = Vector2::new(center.x + 50.0, center.y - 5.0);
+            d.draw_circle_v(target, 22.0, Color::YELLOW);
+            d.draw_circle_v(target, 6.0, Color::GREEN);
+            let aim = Vector2::new(center.x + 38.0, center.y + 6.0);
+            d.draw_ring(aim, 8.0, 10.0, 0.0, 360.0, 24, Color::WHITE);
+            for dir in [
+                Vector2::new(1.0, 0.0),
+                Vector2::new(-1.0, 0.0),
+                Vector2::new(0.0, 1.0),
+                Vector2::new(0.0, -1.0),
+            ] {
+                d.draw_line_ex(aim + dir * 4.0, aim + dir * 15.0, 2.0, Color::WHITE);
+            }
+        }
+        guide::Illustration::Charge => {
+            d.draw_ring(center, 22.0, 32.0, 0.0, 360.0, 48, Color::YELLOW);
+            d.draw_ring(center, 26.0, 28.0, 0.0, 360.0, 48, Color::GREEN);
+            d.draw_circle_v(center, 4.0, Color::WHITE);
+            d.draw_ring(center, 41.0, 44.0, 0.0, 360.0, 48, Color::WHITE);
+            // flèches vers le centre : l'anneau se resserre
+            for side in [-1.0, 1.0] {
+                let from = Vector2::new(center.x + side * 95.0, center.y);
+                let to = Vector2::new(center.x + side * 58.0, center.y);
+                draw_guide_arrow(d, from, to, Color::new(255, 255, 255, 160));
+            }
+        }
+        guide::Illustration::Sequence => {
+            let size = 46.0;
+            let gap = 10.0;
+            let total = size * 4.0 + gap * 3.0;
+            let start_x = center.x - total / 2.0;
+            let top = rect.y + 14.0;
+            let arrows = [
+                Vector2::new(0.0, -1.0),
+                Vector2::new(1.0, 0.0),
+                Vector2::new(0.0, -1.0),
+                Vector2::new(-1.0, 0.0),
+            ];
+            for (i, dir) in arrows.iter().enumerate() {
+                let r = Rectangle::new(start_x + i as f32 * (size + gap), top, size, size);
+                let (background, border) = match i {
+                    0 | 1 => (Color::new(40, 120, 40, 230), Color::GREEN),
+                    2 => (Color::new(30, 30, 30, 230), Color::WHITE),
+                    _ => (Color::new(30, 30, 30, 160), Color::new(255, 255, 255, 90)),
+                };
+                d.draw_rectangle_rec(r, background);
+                d.draw_rectangle_lines_ex(r, 2.0, border);
+                let c = Vector2::new(r.x + size / 2.0, r.y + size / 2.0);
+                draw_guide_arrow(d, c - *dir * 13.0, c + *dir * 13.0, Color::WHITE);
+            }
+            draw_guide_time_bar(
+                d,
+                Rectangle::new(start_x, top + size + 10.0, total, 10.0),
+                0.4,
+                0.55,
+            );
+        }
+        guide::Illustration::Runes => {
+            let colors = [
+                Color::new(170, 100, 255, 255),
+                Color::new(60, 200, 255, 255),
+                Color::new(255, 150, 40, 255),
+                Color::new(255, 90, 170, 255),
+            ];
+            let radius = 20.0;
+            let step = 62.0;
+            let start_x = center.x - step * 1.5;
+            let row_y = rect.y + 42.0;
+            for (i, color) in colors.iter().enumerate() {
+                let c = Vector2::new(start_x + i as f32 * step, row_y);
+                // la 2e rune est « allumée » pendant la démo
+                let lit = i == 1;
+                let fill = if lit {
+                    *color
+                } else {
+                    Color::new(color.r / 3, color.g / 3, color.b / 3, 255)
+                };
+                let r = if lit { radius * 1.15 } else { radius };
+                d.draw_poly(c, 3 + i as i32, r, -90.0, fill);
+                d.draw_poly_lines_ex(
+                    c,
+                    3 + i as i32,
+                    r,
+                    -90.0,
+                    2.0,
+                    Color::new(255, 255, 255, 120),
+                );
+            }
+            for i in 0..4 {
+                let p = Vector2::new(center.x + (i as f32 - 1.5) * 12.0, rect.y + 12.0);
+                if i < 1 {
+                    d.draw_circle_v(p, 4.0, Color::WHITE);
+                } else {
+                    d.draw_circle_lines(p.x as i32, p.y as i32, 4.0, Color::WHITE);
+                }
+            }
+            draw_guide_time_bar(
+                d,
+                Rectangle::new(
+                    start_x - radius,
+                    rect.y + 74.0,
+                    step * 3.0 + radius * 2.0,
+                    10.0,
+                ),
+                0.4,
+                0.25,
+            );
+        }
+        guide::Illustration::Heartbeat => {
+            let track = Rectangle::new(rect.x + 14.0, rect.y + 58.0, rect.width - 28.0, 28.0);
+            let line_x = track.x + 50.0;
+            // cœur au-dessus de la ligne de frappe
+            let heart = Vector2::new(line_x, rect.y + 26.0);
+            let r = 9.0;
+            let red = Color::new(200, 20, 40, 255);
+            d.draw_circle_v(Vector2::new(heart.x - r * 0.9, heart.y - r * 0.3), r, red);
+            d.draw_circle_v(Vector2::new(heart.x + r * 0.9, heart.y - r * 0.3), r, red);
+            let a = Vector2::new(heart.x - r * 1.85, heart.y);
+            let b = Vector2::new(heart.x + r * 1.85, heart.y);
+            let tip = Vector2::new(heart.x, heart.y + r * 2.0);
+            d.draw_triangle(a, tip, b, red);
+            d.draw_triangle(a, b, tip, red);
+
+            d.draw_rectangle_rec(track, Color::new(50, 15, 20, 230));
+            d.draw_rectangle(
+                (line_x - 14.0) as i32,
+                track.y as i32,
+                28,
+                track.height as i32,
+                Color::YELLOW,
+            );
+            d.draw_rectangle(
+                (line_x - 6.0) as i32,
+                track.y as i32,
+                12,
+                track.height as i32,
+                Color::GREEN,
+            );
+            d.draw_rectangle(
+                line_x as i32 - 1,
+                track.y as i32 - 4,
+                3,
+                track.height as i32 + 8,
+                Color::WHITE,
+            );
+            let drop_y = track.y + track.height / 2.0;
+            for drop_x in [line_x + 70.0, line_x + 145.0, line_x + 220.0] {
+                d.draw_circle_v(
+                    Vector2::new(drop_x, drop_y),
+                    9.0,
+                    Color::new(220, 30, 50, 255),
+                );
+                d.draw_circle_lines(drop_x as i32, drop_y as i32, 9.0, Color::WHITE);
+            }
+            draw_guide_arrow(
+                d,
+                Vector2::new(track.x + track.width - 20.0, rect.y + 26.0),
+                Vector2::new(track.x + track.width - 80.0, rect.y + 26.0),
+                Color::new(255, 255, 255, 160),
+            );
+        }
+    }
+}
+
+/// barre de temps des jeux « finir avant la fin » : vert = PERFECT, jaune = GOOD
+fn draw_guide_time_bar(d: &mut impl RaylibDraw, bar: Rectangle, perfect_share: f32, progress: f32) {
+    d.draw_rectangle_rec(bar, Color::YELLOW);
+    d.draw_rectangle(
+        bar.x as i32,
+        bar.y as i32,
+        (bar.width * perfect_share) as i32,
+        bar.height as i32,
+        Color::GREEN,
+    );
+    d.draw_rectangle(
+        (bar.x + bar.width * progress) as i32 - 2,
+        bar.y as i32 - 3,
+        3,
+        bar.height as i32 + 6,
+        Color::WHITE,
+    );
+}
+
+/// flèche simple de `from` vers `to` (trait + pointe)
+fn draw_guide_arrow(d: &mut impl RaylibDraw, from: Vector2, to: Vector2, color: Color) {
+    let length = from.distance(to);
+    if length <= 0.0 {
+        return;
+    }
+    let dir = (to - from) * (1.0 / length);
+    let side = Vector2::new(-dir.y, dir.x);
+    let head = (length * 0.45).min(10.0);
+    let base = to - dir * head;
+    d.draw_line_ex(from, base, 3.0, color);
+    let left = base + side * (head * 0.8);
+    let right = base - side * (head * 0.8);
+    // raylib ne dessine un triangle que dans le sens antihoraire : on essaie les deux
+    d.draw_triangle(to, left, right, color);
+    d.draw_triangle(to, right, left, color);
 }

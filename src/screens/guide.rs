@@ -49,7 +49,22 @@ pub enum Block {
     },
     /// faux panneau de preview, lignes colorées
     Panel(Vec<(String, Color)>),
+    /// petite image d'un mini-jeu, dessinée à droite des lignes qui suivent.
+    /// Ne prend pas de place dans la colonne de texte
+    Illustration(Illustration),
 }
+
+/// mini-jeux illustrés dans le guide (vue figée, mêmes couleurs que le vrai jeu)
+pub enum Illustration {
+    Target,
+    Charge,
+    Sequence,
+    Runes,
+    Heartbeat,
+}
+
+pub const ILLUSTRATION_WIDTH: f32 = 300.0;
+pub const ILLUSTRATION_HEIGHT: f32 = 100.0;
 
 impl Block {
     pub fn height(&self) -> f32 {
@@ -64,6 +79,15 @@ impl Block {
             }
             Block::Bar { .. } => 54.0,
             Block::Panel(lines) => lines.len() as f32 * 22.0 + 30.0,
+            Block::Illustration(_) => 0.0,
+        }
+    }
+
+    /// hauteur réellement dessinée (une illustration déborde sur les lignes suivantes)
+    pub fn draw_extent(&self) -> f32 {
+        match self {
+            Block::Illustration(_) => ILLUSTRATION_HEIGHT,
+            _ => self.height(),
         }
     }
 }
@@ -118,28 +142,33 @@ pub fn content() -> Vec<Block> {
         text("Out of time = BAD."),
         text("You play the minigame of the unit YOU control, even on defense."),
         Block::Gap,
+        Block::Illustration(Illustration::Target),
         text("Longbowman: shoot the moving target with the crosshair."),
         text("  yellow ring = GOOD, green center = PERFECT, outside = miss."),
         text("  Window = target size, precision = center size,"),
         text("  tempo = how fast the target moves."),
         Block::Gap,
+        Block::Illustration(Illustration::Charge),
         text("Cavalry / Ghoul: charge! A white ring closes in on the target."),
         text("  Click when it crosses the yellow band (green = PERFECT)."),
         text("  Too late: the ring passes, a miss (a life starts a new charge)."),
         text("  Window = band size, precision = green size, tempo = ring speed."),
         Block::Gap,
+        Block::Illustration(Illustration::Sequence),
         text("Assassin / Wraith: type the 4 arrows in order, fast!"),
         text("  Arrow keys or WASD (ZQSD on AZERTY). Finish in the green part"),
         text("  of the time bar = PERFECT, in the yellow part = GOOD."),
         text("  Wrong key = miss. Too slow = miss (a life gives a new sequence)."),
         text("  Window = time allowed, precision = green part, tempo = speed."),
         Block::Gap,
+        Block::Illustration(Illustration::Runes),
         text("Mage / Banshee: watch 4 runes light up, then click them back"),
         text("  in the same order. Same time bar: green = PERFECT, yellow = GOOD."),
         text("  Wrong rune = miss. Too slow = miss (a life shows a new sequence)."),
         text("  The timer is paused while the runes are shown."),
         text("  Window = time to repeat, precision = green part, tempo = speed."),
         Block::Gap,
+        Block::Illustration(Illustration::Heartbeat),
         text("Blood Knight: blood pulse! The heart beats twice to set the rhythm,"),
         text("  then click on each of the 3 blood drops as it crosses the line."),
         text("  Every drop must land in the yellow band. Average offset in the"),
