@@ -205,9 +205,9 @@ fn fresh_units(rl: &RaylibHandle, blocked_tiles: &[(i32, i32)]) -> Vec<Unit> {
 
         // Undead
         spawn_unit("Wraith",      Faction::Undead, UnitClass::Wraith,      3,  90, 1, 50,  8, false),
-        spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 2, 200, 1, 65, 14, false),
+        spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 4, 120, 1, 65, 14, false),
         spawn_unit("Banshee",     Faction::Undead, UnitClass::Banshee,     2,  60, 2, 78,  2, false),
-        spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       4,  85, 1, 60,  5, false),
+        spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       3,  85, 1, 60,  5, false),
         spawn_unit("Skeleton",    Faction::Undead, UnitClass::Skeleton,    2,  80, 1, 50,  6, false),
         spawn_unit("Necromancer", Faction::Undead, UnitClass::Necromancer, 2,  60, 2, 75,  2, true),
     ];
