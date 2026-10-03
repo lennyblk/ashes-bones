@@ -1,3 +1,4 @@
+mod channel;
 mod charge;
 mod heartbeat;
 mod runes;
@@ -12,6 +13,7 @@ use crate::duel::{DuelConditions, DuelSide};
 use crate::unit::{Faction, PendingAction, Unit, UnitClass, UnitState};
 use raylib::prelude::*;
 
+use channel::Channel;
 use charge::ChargeRing;
 use heartbeat::Heartbeat;
 pub use runes::BASE_GOOD_TIME as RUNES_TIME;
@@ -21,8 +23,8 @@ use sequence::KeySequence;
 use target::TargetShot;
 use timing::TimingBar;
 
-// temps max pour réussir un mini-jeu, après c'est BAD. La séquence, les runes et le
-// cœur gèrent leur propre temps et n'utilisent pas celui-ci
+// temps max pour réussir un mini-jeu, après c'est BAD. La séquence, les runes, le
+// cœur et la canalisation gèrent leur propre temps et n'utilisent pas celui-ci
 pub const TIME_LIMIT: f32 = 4.0;
 const SAVED_FLASH: f32 = 0.6;
 
@@ -74,15 +76,14 @@ pub enum MiniGameKind {
     Sequence,
     Runes,
     Heartbeat,
+    Channel,
 }
 
 impl MiniGameKind {
     pub fn for_class(class: UnitClass) -> MiniGameKind {
         match class {
-            UnitClass::Soldier
-            | UnitClass::Skeleton
-            | UnitClass::Priest
-            | UnitClass::Necromancer => MiniGameKind::Timing,
+            UnitClass::Soldier | UnitClass::Skeleton => MiniGameKind::Timing,
+            UnitClass::Priest | UnitClass::Necromancer => MiniGameKind::Channel,
             UnitClass::Longbowman => MiniGameKind::Target,
             UnitClass::Cavalry | UnitClass::Ghoul => MiniGameKind::Charge,
             UnitClass::Assassin | UnitClass::Wraith => MiniGameKind::Sequence,
@@ -101,6 +102,7 @@ enum Mechanic {
     Sequence(KeySequence),
     Runes(RuneMemory),
     Heartbeat(Heartbeat),
+    Channel(Channel),
 }
 
 /// partie commune à tous les mini-jeux : chrono, vies, résultat final
@@ -122,6 +124,7 @@ impl MiniGame {
             MiniGameKind::Sequence => Mechanic::Sequence(KeySequence::new(rl, side)),
             MiniGameKind::Runes => Mechanic::Runes(RuneMemory::new(rl, side)),
             MiniGameKind::Heartbeat => Mechanic::Heartbeat(Heartbeat::new(rl, side)),
+            MiniGameKind::Channel => Mechanic::Channel(Channel::new(rl, side)),
         };
         MiniGame {
             mechanic,
@@ -145,6 +148,7 @@ impl MiniGame {
             Mechanic::Sequence(sequence) => sequence.update(rl, delta_time),
             Mechanic::Runes(runes) => runes.update(rl, delta_time),
             Mechanic::Heartbeat(heart) => heart.update(rl, delta_time),
+            Mechanic::Channel(channel) => channel.update(rl, delta_time),
         };
         match attempt {
             Some(Attempt::Hit(result)) => self.result = Some(result),
@@ -156,11 +160,14 @@ impl MiniGame {
             None => {}
         }
 
-        // séquence, runes et cœur gèrent leur temps eux-mêmes (trop lent = raté), le
+        // séquence, runes, cœur et canalisation gèrent leur temps eux-mêmes (trop lent = raté), le
         // chrono global ne doit pas les couper avant la fin
         let own_timer = matches!(
             self.mechanic,
-            Mechanic::Sequence(_) | Mechanic::Runes(_) | Mechanic::Heartbeat(_)
+            Mechanic::Sequence(_)
+                | Mechanic::Runes(_)
+                | Mechanic::Heartbeat(_)
+                | Mechanic::Channel(_)
         );
         if !own_timer {
             self.time_remaining -= delta_time;
@@ -195,6 +202,10 @@ impl MiniGame {
             Mechanic::Heartbeat(heart) => {
                 heart.draw(d);
                 heart.area()
+            }
+            Mechanic::Channel(channel) => {
+                channel.draw(d);
+                channel.area()
             }
         };
         self.draw_lives(d, assets, area);

@@ -1495,6 +1495,51 @@ fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, 
                 0.25,
             );
         }
+        guide::Illustration::Channel => {
+            // aura qui dérive (traînée), curseur dans le cœur, jauge de concentration
+            for i in 0..5 {
+                let p = Vector2::new(
+                    center.x - 90.0 + i as f32 * 22.0,
+                    center.y - 12.0 + (i as f32 * 0.9).sin() * 10.0,
+                );
+                d.draw_circle_v(p, 4.0, Color::new(255, 240, 150, 40 + i as u8 * 20));
+            }
+            let aura = Vector2::new(center.x + 40.0, center.y - 10.0);
+            d.draw_circle_v(aura, 34.0, Color::new(255, 240, 150, 80));
+            d.draw_circle_v(aura, 26.0, Color::YELLOW);
+            d.draw_circle_v(aura, 10.0, Color::GREEN);
+            let aim = Vector2::new(aura.x + 4.0, aura.y + 3.0);
+            d.draw_circle_v(aim, 5.0, Color::WHITE);
+            d.draw_circle_lines(aim.x as i32, aim.y as i32, 5.0, Color::BLACK);
+            let meter = Rectangle::new(
+                rect.x + 20.0,
+                rect.y + rect.height - 20.0,
+                rect.width - 40.0,
+                10.0,
+            );
+            d.draw_rectangle_rec(meter, Color::new(60, 60, 60, 230));
+            d.draw_rectangle(
+                (meter.x + meter.width * 0.5) as i32,
+                meter.y as i32,
+                (meter.width * 0.35) as i32,
+                meter.height as i32,
+                Color::new(255, 255, 0, 110),
+            );
+            d.draw_rectangle(
+                (meter.x + meter.width * 0.85) as i32,
+                meter.y as i32,
+                (meter.width * 0.15) as i32,
+                meter.height as i32,
+                Color::new(0, 228, 48, 110),
+            );
+            d.draw_rectangle(
+                meter.x as i32,
+                meter.y as i32 + 2,
+                (meter.width * 0.62) as i32,
+                meter.height as i32 - 4,
+                Color::WHITE,
+            );
+        }
         guide::Illustration::Heartbeat => {
             let track = Rectangle::new(rect.x + 14.0, rect.y + 58.0, rect.width - 28.0, 28.0);
             let line_x = track.x + 50.0;

@@ -61,6 +61,7 @@ pub enum Illustration {
     Sequence,
     Runes,
     Heartbeat,
+    Channel,
 }
 
 pub const ILLUSTRATION_WIDTH: f32 = 300.0;
@@ -174,6 +175,13 @@ pub fn content() -> Vec<Block> {
         text("  Every drop must land in the yellow band. Average offset in the"),
         text("  green band = PERFECT. A missed drop = miss (a life skips it)."),
         text("  Window = yellow band, precision = green band, tempo = heart speed."),
+        Block::Gap,
+        Block::Illustration(Illustration::Channel),
+        text("Priest / Necromancer: channel! Keep your cursor inside the drifting"),
+        text("  aura for 3 seconds, no click. Green core = full focus,"),
+        text("  yellow = 60%. Final focus: 50%+ = GOOD, 85%+ = PERFECT."),
+        text("  Not enough focus = miss (a life restarts the channel)."),
+        text("  Window = aura size, precision = core size, tempo = drift speed."),
         Block::Gap,
         heading("Duel conditions"),
         text("Where your units stand shapes the minigame BEFORE it starts."),
