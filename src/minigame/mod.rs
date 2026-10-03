@@ -1,4 +1,5 @@
 mod charge;
+mod runes;
 mod sequence;
 mod target;
 mod timing;
@@ -11,11 +12,15 @@ use crate::unit::{Faction, PendingAction, Unit, UnitClass, UnitState};
 use raylib::prelude::*;
 
 use charge::ChargeRing;
+pub use runes::BASE_GOOD_TIME as RUNES_TIME;
+use runes::RuneMemory;
+pub use sequence::BASE_GOOD_TIME as SEQUENCE_TIME;
 use sequence::KeySequence;
 use target::TargetShot;
 use timing::TimingBar;
 
-// temps max pour réussir un mini-jeu, après c'est BAD
+// temps max pour réussir un mini-jeu, après c'est BAD. La séquence et les runes
+// ont leur propre barre de temps (SEQUENCE_TIME / RUNES_TIME) et n'utilisent pas celui-ci
 pub const TIME_LIMIT: f32 = 4.0;
 const SAVED_FLASH: f32 = 0.6;
 
@@ -45,6 +50,19 @@ pub enum Attempt {
     Hit(TimingResult),
 }
 
+// part du temps accordé qui donne PERFECT, par point de precision/window.
+// Base (3% / 20%) -> 2.5 x 0.15 = ~37% du temps
+const PERFECT_SHARE_SCALE: f32 = 2.5;
+
+/// pour les mini-jeux « finir avant la fin de la barre » (séquence, runes) :
+/// temps max pour un PERFECT. 0 = PERFECT impossible (ex : défenseur pris à revers)
+fn perfect_time(side: &DuelSide, good_time: f32) -> f32 {
+    if side.precision <= 0.0 {
+        return 0.0;
+    }
+    good_time * (PERFECT_SHARE_SCALE * side.precision / side.window).min(0.95)
+}
+
 /// quel mini-jeu joue une classe (en attaque comme en défense)
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum MiniGameKind {
@@ -52,6 +70,7 @@ pub enum MiniGameKind {
     Target,
     Charge,
     Sequence,
+    Runes,
 }
 
 impl MiniGameKind {
@@ -59,14 +78,13 @@ impl MiniGameKind {
         match class {
             UnitClass::Soldier
             | UnitClass::Skeleton
-            | UnitClass::Mage
-            | UnitClass::Banshee
             | UnitClass::BloodKnight
             | UnitClass::Priest
             | UnitClass::Necromancer => MiniGameKind::Timing,
             UnitClass::Longbowman => MiniGameKind::Target,
             UnitClass::Cavalry | UnitClass::Ghoul => MiniGameKind::Charge,
             UnitClass::Assassin | UnitClass::Wraith => MiniGameKind::Sequence,
+            UnitClass::Mage | UnitClass::Banshee => MiniGameKind::Runes,
         }
     }
 }
@@ -78,6 +96,7 @@ enum Mechanic {
     Target(TargetShot),
     Charge(ChargeRing),
     Sequence(KeySequence),
+    Runes(RuneMemory),
 }
 
 /// partie commune à tous les mini-jeux : chrono, vies, résultat final
@@ -97,6 +116,7 @@ impl MiniGame {
             MiniGameKind::Target => Mechanic::Target(TargetShot::new(rl, side)),
             MiniGameKind::Charge => Mechanic::Charge(ChargeRing::new(rl, side)),
             MiniGameKind::Sequence => Mechanic::Sequence(KeySequence::new(rl, side)),
+            MiniGameKind::Runes => Mechanic::Runes(RuneMemory::new(rl, side)),
         };
         MiniGame {
             mechanic,
@@ -118,6 +138,7 @@ impl MiniGame {
             Mechanic::Target(target) => target.update(rl, delta_time),
             Mechanic::Charge(ring) => ring.update(rl, delta_time),
             Mechanic::Sequence(sequence) => sequence.update(rl, delta_time),
+            Mechanic::Runes(runes) => runes.update(rl, delta_time),
         };
         match attempt {
             Some(Attempt::Hit(result)) => self.result = Some(result),
@@ -129,7 +150,12 @@ impl MiniGame {
             None => {}
         }
 
-        self.time_remaining -= delta_time;
+        // séquence et runes gèrent leur temps elles-mêmes (trop lent = raté), le chrono
+        // global ne doit pas les couper avant la fin de leur barre
+        let own_timer = matches!(self.mechanic, Mechanic::Sequence(_) | Mechanic::Runes(_));
+        if !own_timer {
+            self.time_remaining -= delta_time;
+        }
         if self.result.is_none() && self.time_remaining <= 0.0 {
             self.result = Some(TimingResult::Bad);
         }
@@ -152,6 +178,10 @@ impl MiniGame {
             Mechanic::Sequence(sequence) => {
                 sequence.draw(d);
                 sequence.area()
+            }
+            Mechanic::Runes(runes) => {
+                runes.draw(d);
+                runes.area()
             }
         };
         self.draw_lives(d, assets, area);

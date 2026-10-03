@@ -208,7 +208,8 @@ fn main() {
 
         let highlights = grid::update(&mut game, &rl, click_consumed, cursor_grid_x, cursor_grid_y);
 
-        let hovering_selectable_unit = game.selected_unit.is_none()
+        let hovering_selectable_unit = game.current_turn == game_mode::TurnPhase::PlayerTurn
+            && game.selected_unit.is_none()
             && game.units.iter().any(|u| {
                 u.faction == game.player_faction
                     && u.is_alive()

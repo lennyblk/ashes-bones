@@ -4,7 +4,7 @@ use raylib::prelude::*;
 
 use crate::duel::{self, DuelConditions};
 use crate::game::Game;
-use crate::game_mode::GameMode;
+use crate::game_mode::{GameMode, TurnPhase};
 use crate::input;
 use crate::movement::MovementRange;
 use crate::unit::{PendingAction, Unit, UnitState, two_mut};
@@ -42,6 +42,13 @@ pub fn update(
     cursor_grid_x: i32,
     cursor_grid_y: i32,
 ) -> GridHighlights {
+    // pendant le tour ennemi on ne contrôle aucune unité : sinon on pourrait bouger
+    // pendant que l'IA joue, puis rebouger à son tour (points de mouvement remis à neuf)
+    let player_turn = game.current_turn == TurnPhase::PlayerTurn;
+    if !player_turn {
+        game.selected_unit = None;
+    }
+
     let (move_range, came_from) = if let Some(sel) = game.selected_unit {
         if game.game_mode == GameMode::GridScreen {
             // toute autre unité vivante (alliée ou ennemie) bloque le passage
@@ -79,7 +86,7 @@ pub fn update(
         });
 
         match game.selected_unit {
-            None => {
+            None if player_turn => {
                 game.selected_unit = game.units.iter().position(|u| {
                     u.faction == game.player_faction
                         && u.is_alive()

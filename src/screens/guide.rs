@@ -9,7 +9,7 @@ use crate::duel::{
 use crate::game::Game;
 use crate::game_mode::GameMode;
 use crate::input;
-use crate::minigame::TIME_LIMIT;
+use crate::minigame::{RUNES_TIME, SEQUENCE_TIME, TIME_LIMIT};
 use crate::ui::HudRects;
 
 // mise en page du guide (partagée entre update pour le scroll et render pour le dessin)
@@ -112,9 +112,10 @@ pub fn content() -> Vec<Block> {
         text("You defend:  the enemy attacks, you play the bar to parry"),
         text("             BAD x1.5   GOOD x1   PERFECT x0.5 damage taken"),
         Block::Text(format!(
-            "You have {} seconds. No click in time = BAD.",
-            TIME_LIMIT as i32
+            "You have {} seconds (Assassin/Wraith: {}, Mage/Banshee: {}).",
+            TIME_LIMIT as i32, SEQUENCE_TIME as i32, RUNES_TIME as i32
         )),
+        text("Out of time = BAD."),
         text("You play the minigame of the unit YOU control, even on defense."),
         Block::Gap,
         text("Longbowman: shoot the moving target with the crosshair."),
@@ -132,6 +133,11 @@ pub fn content() -> Vec<Block> {
         text("  of the time bar = PERFECT, in the yellow part = GOOD."),
         text("  Wrong key = miss. Too slow = miss (a life gives a new sequence)."),
         text("  Window = time allowed, precision = green part, tempo = speed."),
+        text("Mage / Banshee: watch 4 runes light up, then click them back"),
+        text("  in the same order. Same time bar: green = PERFECT, yellow = GOOD."),
+        text("  Wrong rune = miss. Too slow = miss (a life shows a new sequence)."),
+        text("  The timer is paused while the runes are shown."),
+        text("  Window = time to repeat, precision = green part, tempo = speed."),
         Block::Gap,
         heading("Duel conditions"),
         text("Where your units stand shapes the minigame BEFORE it starts."),

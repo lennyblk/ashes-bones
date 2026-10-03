@@ -3,11 +3,11 @@ use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use raylib::consts::KeyboardKey::{self, *};
 use raylib::prelude::*;
 
-use super::{Attempt, TimingResult};
+use super::{Attempt, TimingResult, perfect_time};
 
 const KEY_COUNT: usize = 4;
-// temps pour finir la séquence en GOOD avec la window de base : 0.4 s par touche
-const BASE_GOOD_TIME: f32 = 1.6;
+// temps pour finir la séquence en GOOD avec la window de base
+pub const BASE_GOOD_TIME: f32 = 4.0;
 const BOX_SIZE: f32 = 70.0;
 const BOX_GAP: f32 = 14.0;
 const TIME_BAR_HEIGHT: f32 = 16.0;
@@ -72,12 +72,7 @@ pub struct KeySequence {
 impl KeySequence {
     pub fn new(rl: &RaylibHandle, side: &DuelSide) -> KeySequence {
         let good_time = BASE_GOOD_TIME * (side.window / BASE_WINDOW) / side.tempo;
-        // precision de base (3% pour 20% de window) -> PERFECT sous ~72% du temps
-        let perfect_time = if side.precision > 0.0 {
-            good_time * (0.5 + 1.5 * side.precision / side.window).min(0.95)
-        } else {
-            0.0
-        };
+        let perfect_time = perfect_time(side, good_time);
         KeySequence {
             arrows: std::array::from_fn(|_| Arrow::random(rl)),
             done: 0,
