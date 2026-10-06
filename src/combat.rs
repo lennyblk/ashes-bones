@@ -228,9 +228,9 @@ pub fn update(game: &mut Game, assets: &mut Assets, rl: &RaylibHandle, delta_tim
     let right_x = center_x - overlap;
 
     // faire disparaître le message de résultat du minigame après un certain temps
-    if let Some((_, time_left, _)) = &mut game.result_display {
-        *time_left -= delta_time;
-        if *time_left <= 0.0 {
+    if let Some(display) = &mut game.result_display {
+        display.time_left -= delta_time;
+        if display.time_left <= 0.0 {
             game.result_display = None;
         }
     }
@@ -292,7 +292,7 @@ pub fn update(game: &mut Game, assets: &mut Assets, rl: &RaylibHandle, delta_tim
                 let set = assets.animation_set_mut(attacker_class);
                 (&mut set.attack, &mut set.attack_effect)
             };
-            if let Some(result) = minigame::handle_minigame(
+            if let Some(display) = minigame::handle_minigame(
                 attacker,
                 defender,
                 game.player_faction,
@@ -303,7 +303,7 @@ pub fn update(game: &mut Game, assets: &mut Assets, rl: &RaylibHandle, delta_tim
                 delta_time,
                 cast_anim,
             ) {
-                game.result_display = Some((result, 1.0, game.damage_multiplier));
+                game.result_display = Some(display);
             }
         }
         if is_heal {

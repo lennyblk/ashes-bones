@@ -238,6 +238,19 @@ impl MiniGame {
     }
 }
 
+/// multiplicateur final d'un duel : attaque × parade (un soin n'a pas de parade)
+pub fn duel_multiplier(attack: TimingResult, parry: Option<TimingResult>) -> f32 {
+    attack.to_multiplier(true) * parry.map_or(1.0, |p| p.to_multiplier(false))
+}
+
+/// résultat du duel affiché au-dessus du combat
+pub struct ResultDisplay {
+    pub attack: TimingResult,
+    pub parry: Option<TimingResult>,
+    pub multiplier: f32,
+    pub time_left: f32,
+}
+
 pub fn handle_minigame(
     attacker: &mut Unit,
     defender: &mut Unit,
@@ -248,40 +261,60 @@ pub fn handle_minigame(
     rl: &RaylibHandle,
     delta_time: f32,
     attacker_attack_animation: &mut Animation,
-) -> Option<TimingResult> {
+) -> Option<ResultDisplay> {
     if attacker.state != UnitState::MiniGame {
         return None;
     }
-
+    let is_heal = matches!(attacker.pending_action, Some(PendingAction::Heal(_)));
     let player_is_attacker = attacker.faction == player_faction;
 
-    // le joueur joue le mini-jeu de SA classe, qu'il attaque ou qu'il défende
-    if minigame.is_none() {
-        let player_class = if player_is_attacker {
-            attacker.class
-        } else {
-            defender.class
-        };
-        *minigame = Some(MiniGame::new(
-            MiniGameKind::for_class(player_class),
-            conditions.side(player_is_attacker),
-            rl,
-        ));
-    }
+    // chaque camp joue le mini-jeu de SA classe avec SA barre. Le joueur joue toujours,
+    // sauf quand l'IA soigne un de ses alliés : rien à contrer
+    let player_result = if player_is_attacker || !is_heal {
+        if minigame.is_none() {
+            let player_class = if player_is_attacker {
+                attacker.class
+            } else {
+                defender.class
+            };
+            *minigame = Some(MiniGame::new(
+                MiniGameKind::for_class(player_class),
+                conditions.side(player_is_attacker),
+                rl,
+            ));
+        }
+        let game = minigame.as_mut().unwrap();
+        game.update(rl, delta_time);
+        // on attend que le joueur ait fini
+        Some(game.result?)
+    } else {
+        None
+    };
 
-    let game = minigame.as_mut().unwrap();
-    game.update(rl, delta_time);
+    // le camp de l'IA ne joue pas : il tire son résultat selon les chances de sa barre
+    let result_of = |is_attacker: bool| match player_result {
+        Some(r) if is_attacker == player_is_attacker => r,
+        _ => conditions
+            .side(is_attacker)
+            .odds()
+            .pick(rl.get_random_value::<i32>(0..=999) as f32 / 1000.0),
+    };
+    let attack = result_of(true);
+    let parry = (!is_heal).then(|| result_of(false));
 
-    if let Some(result) = game.result {
-        *damage_multiplier = result.to_multiplier(player_is_attacker);
-        attacker.state = match attacker.pending_action {
-            Some(PendingAction::Heal(_)) => UnitState::Healing,
-            _ => UnitState::Attacking,
-        };
-        attacker_attack_animation.current = 0;
-        attacker_attack_animation.finished = false;
-        *minigame = None;
-        return Some(result);
-    }
-    None
+    *damage_multiplier = duel_multiplier(attack, parry);
+    attacker.state = if is_heal {
+        UnitState::Healing
+    } else {
+        UnitState::Attacking
+    };
+    attacker_attack_animation.current = 0;
+    attacker_attack_animation.finished = false;
+    *minigame = None;
+    Some(ResultDisplay {
+        attack,
+        parry,
+        multiplier: *damage_multiplier,
+        time_left: 1.0,
+    })
 }

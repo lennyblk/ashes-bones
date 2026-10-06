@@ -5,7 +5,7 @@ use crate::duel::{DuelConditions, DuelSide};
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::grid::DuelPreview;
 use crate::map::TileMap;
-use crate::minigame::{MiniGame, TimingResult};
+use crate::minigame::{MiniGame, ResultDisplay, TimingResult};
 use crate::screens::{guide, winfo};
 use crate::ui::{self, HudRects};
 use crate::unit::{Unit, UnitState};
@@ -947,7 +947,7 @@ pub fn draw_combat_screen(
     attacker_combat_x: f32,
     defender_combat_x: f32,
     minigame: Option<&MiniGame>,
-    result_display: Option<&(TimingResult, f32, f32)>,
+    result_display: Option<&ResultDisplay>,
     conditions: &DuelConditions,
     player_is_attacker: bool,
 ) {
@@ -1035,9 +1035,8 @@ pub fn draw_combat_screen(
         minigame.draw(d, assets);
         draw_combat_factors(d, assets, conditions, player_is_attacker);
     }
-    if let Some((result, _, multiplier)) = result_display {
-        // _ c'est le "time_left" qu'on a pas besoin d'utiliser ici
-        draw_timing_result(d, assets, *result, *multiplier);
+    if let Some(shown) = result_display {
+        draw_timing_result(d, assets, shown, player_is_attacker);
     }
 }
 
@@ -1076,15 +1075,24 @@ fn draw_unit_hud(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit) {
 fn draw_timing_result(
     d: &mut RaylibDrawHandle,
     assets: &Assets,
-    result: TimingResult,
-    multiplier: f32,
+    shown: &ResultDisplay,
+    player_is_attacker: bool,
 ) {
-    let (text, color) = match result {
+    let label = |r: TimingResult| match r {
         TimingResult::Bad => ("BAD", Color::RED),
         TimingResult::Good => ("GOOD", Color::ORANGE),
         TimingResult::Perfect => ("PERFECT", Color::LIME),
     };
-    let full_text = format!("{} x{:.1}", text, multiplier);
+    // le résultat du joueur d'abord, celui d'en face ensuite
+    let (mine, theirs) = match shown.parry {
+        Some(parry) if !player_is_attacker => (parry, Some(shown.attack)),
+        parry => (shown.attack, parry),
+    };
+    let (mine_text, color) = label(mine);
+    let full_text = match theirs {
+        Some(t) => format!("{} vs {}  x{:.2}", mine_text, label(t).0, shown.multiplier),
+        None => format!("{} x{:.1}", mine_text, shown.multiplier),
+    };
 
     let text_size = assets.hud_font.measure_text(&full_text, 40.0, 1.0);
     d.draw_text_ex(
@@ -1250,7 +1258,7 @@ fn draw_duel_preview(
     ];
     // chances estimées (même calcul que l'IA) et avantage du placement
     let odds = c.attacker.odds();
-    let expected = (c.base_damage as f32 * odds.attack_multiplier()).round() as i32;
+    let expected = (c.base_damage as f32 * c.expected_multiplier()).round() as i32;
     let advantage = c.advantage();
     lines.push((
         format!(
@@ -1275,7 +1283,10 @@ fn draw_duel_preview(
         format!("You    {}", side_summary(&c.attacker)),
         Color::WHITE,
     ));
-    lines.push((format!("Them   {}", side_summary(&c.defender)), MUTED));
+    lines.push((
+        format!("Them   {}", side_summary(&c.defender)),
+        Color::WHITE,
+    ));
     if c.factors.is_empty() {
         lines.push((String::from("No positional modifiers"), MUTED));
     }

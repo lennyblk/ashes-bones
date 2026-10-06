@@ -142,6 +142,7 @@ pub fn content() -> Vec<Block> {
         )),
         text("Out of time = BAD."),
         text("You play the minigame of the unit YOU control, even on defense."),
+        text("Both sides play at once: damage = attack x parry."),
         Block::Gap,
         Block::Illustration(Illustration::Target),
         text("Longbowman: shoot the moving target with the crosshair."),

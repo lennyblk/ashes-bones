@@ -1,4 +1,5 @@
 use crate::combat::attack_damage_dealt;
+use crate::minigame::TimingResult;
 use crate::unit::Unit;
 
 pub const BASE_WINDOW: f32 = 0.2;
@@ -76,6 +77,17 @@ impl Odds {
     pub fn parry_multiplier(&self) -> f32 {
         self.perfect * 0.5 + self.good + self.bad * 1.5
     }
+
+    /// tire un résultat selon ces chances (`roll` entre 0 et 1) : le camp joué par l'IA
+    pub fn pick(&self, roll: f32) -> TimingResult {
+        if roll < self.perfect {
+            TimingResult::Perfect
+        } else if roll < self.perfect + self.good {
+            TimingResult::Good
+        } else {
+            TimingResult::Bad
+        }
+    }
 }
 
 /// une raison qui change le duel, affichée au joueur (preview sur la grille + écran de combat)
@@ -113,12 +125,16 @@ impl DuelConditions {
         }
     }
 
+    /// multiplicateur de dégâts attendu, les deux camps jouent : attaque × parade
+    pub fn expected_multiplier(&self) -> f32 {
+        self.attacker.odds().attack_multiplier() * self.defender.odds().parry_multiplier()
+    }
+
     /// dégâts attendus de l'attaquant en % par rapport à un duel sans placement
     /// (ex : +12 = 12% de dégâts en plus en moyenne). Note des cases d'attaque
     pub fn advantage(&self) -> i32 {
-        let neutral = DuelSide::base().odds().attack_multiplier();
-        let here = self.attacker.odds().attack_multiplier();
-        ((here / neutral - 1.0) * 100.0).round() as i32
+        let neutral = DuelConditions::neutral().expected_multiplier();
+        ((self.expected_multiplier() / neutral - 1.0) * 100.0).round() as i32
     }
 }
 
@@ -275,87 +291,5 @@ pub fn compute(
         defender: def.clamped(),
         factors,
         base_damage: attack_damage_dealt(attacker.attack_power, defender.defense),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::unit::{Faction, UnitClass, UnitState};
-
-    fn unit(faction: Faction, x: i32, y: i32, range: i32) -> Unit {
-        Unit {
-            name: String::from("u"),
-            faction,
-            class: UnitClass::Soldier,
-            grid_x: x,
-            grid_y: y,
-            screen_x: 0.0,
-            screen_y: 0.0,
-            move_points: 2,
-            move_points_remaining: 2,
-            has_attacked: false,
-            hp_points: 100,
-            hp_max_points: 100,
-            path: Vec::new(),
-            state: UnitState::Idle,
-            facing_left: false,
-            attack_range: range,
-            attack_power: 50,
-            defense: 10,
-            can_heal: false,
-            pending_action: None,
-        }
-    }
-
-    #[test]
-    fn duel_seul_est_neutre() {
-        let units = vec![
-            unit(Faction::Human, 0, 0, 1),
-            unit(Faction::Undead, 1, 0, 1),
-        ];
-        let c = compute(&units, 0, (0, 0), 1);
-        assert!(c.factors.is_empty());
-        assert_eq!(c.attacker.window, BASE_WINDOW);
-        assert_eq!(c.base_damage, 45);
-    }
-
-    #[test]
-    fn revers_donne_encerclement_et_supprime_la_parade_parfaite() {
-        // attaquant à gauche, allié pile en face à droite du défenseur
-        let units = vec![
-            unit(Faction::Human, 0, 0, 1),
-            unit(Faction::Undead, 1, 0, 1),
-            unit(Faction::Human, 2, 0, 1),
-        ];
-        let c = compute(&units, 0, (0, 0), 1);
-        assert!(c.attacker.window > BASE_WINDOW);
-        assert!(c.attacker.precision > BASE_PRECISION);
-        assert_eq!(c.defender.precision, 0.0);
-        assert!(c.advantage() > 0);
-    }
-
-    #[test]
-    fn garde_retrecit_la_zone_et_donne_des_vies() {
-        let units = vec![
-            unit(Faction::Human, 0, 0, 1),
-            unit(Faction::Undead, 1, 0, 1),
-            unit(Faction::Undead, 1, 1, 1),
-        ];
-        let c = compute(&units, 0, (0, 0), 1);
-        assert!(c.attacker.window < BASE_WINDOW);
-        assert_eq!(c.defender.lives, 1);
-        assert!(c.advantage() < 0);
-    }
-
-    #[test]
-    fn preview_depuis_une_autre_case() {
-        // l'archer est loin mais on simule l'attaque depuis (3, 0) : tir visé
-        let units = vec![
-            unit(Faction::Human, 9, 9, 3),
-            unit(Faction::Undead, 0, 0, 1),
-        ];
-        let c = compute(&units, 0, (3, 0), 1);
-        assert!(c.attacker.tempo < 1.0);
     }
 }

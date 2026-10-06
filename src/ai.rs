@@ -83,10 +83,10 @@ fn plan_to(
 pub fn attack_score(units: &[Unit], idx: usize, from: (i32, i32), target_idx: usize) -> f32 {
     let me = &units[idx];
     let target = &units[target_idx];
-    // c'est le joueur qui pare : seule la barre du défenseur compte pour l'IA
+    // les deux camps jouent : l'IA tire son attaque, le joueur pare
     let conditions = duel::compute(units, idx, from, target_idx);
     let base = conditions.base_damage as f32;
-    let expected = base * conditions.defender.odds().parry_multiplier();
+    let expected = base * conditions.expected_multiplier();
     let hp = target.hp_points.max(1) as f32;
 
     let mut score = SCORE_DAMAGE * (expected / hp).min(1.0);

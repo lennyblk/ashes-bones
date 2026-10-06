@@ -2,7 +2,7 @@ use raylib::prelude::*;
 
 use crate::duel::DuelConditions;
 use crate::game_mode::{GameMode, TurnPhase};
-use crate::minigame::{MiniGame, TimingResult};
+use crate::minigame::{MiniGame, ResultDisplay};
 use crate::unit::{Faction, Unit, UnitClass, UnitState};
 use crate::{GRID_COLS, GRID_ROWS, TILE_SIZE};
 
@@ -45,7 +45,7 @@ pub struct Game {
     pub duel_conditions: DuelConditions,
     pub minigame: Option<MiniGame>,
     pub damage_multiplier: f32,
-    pub result_display: Option<(TimingResult, f32, f32)>, // alert qui pop au resultat du minigame
+    pub result_display: Option<ResultDisplay>, // alert qui pop au resultat du minigame
 }
 
 impl Game {
