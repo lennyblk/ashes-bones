@@ -3,6 +3,7 @@ mod ai;
 mod animation;
 mod assets;
 mod combat;
+mod command;
 mod cursor;
 mod duel;
 mod game;
@@ -18,6 +19,7 @@ mod turn;
 mod ui;
 mod unit;
 
+use command::Command;
 use cursor::{CursorType, Cursors};
 use game::Game;
 use unit::{Unit, UnitState};
@@ -118,7 +120,7 @@ fn main() {
             && input::is_button_clicked(mouse_position, input::mouse_is_clicked(&rl), hud.btn_wait)
         {
             if let Some(sel) = game.selected_unit {
-                game.units[sel].wait();
+                command::apply(&mut game, Command::Wait { unit: sel });
             }
             game.selected_unit = None;
             click_consumed = true;
@@ -163,7 +165,7 @@ fn main() {
             .all(|u| u.has_finished_turn(&enemy_snapshot, &ally_snapshot));
 
         if player_can_act && (end_turn_clicked || all_units_finished) {
-            turn::start_enemy_turn(&mut game);
+            command::apply(&mut game, Command::EndTurn);
             click_consumed = true;
         }
 
@@ -206,7 +208,11 @@ fn main() {
             )
         };
 
-        let highlights = grid::update(&mut game, &rl, click_consumed, cursor_grid_x, cursor_grid_y);
+        let (highlights, grid_command) =
+            grid::update(&mut game, &rl, click_consumed, cursor_grid_x, cursor_grid_y);
+        if let Some(cmd) = grid_command {
+            command::apply(&mut game, cmd);
+        }
 
         let hovering_selectable_unit = game.current_turn == game_mode::TurnPhase::PlayerTurn
             && game.selected_unit.is_none()

@@ -1,4 +1,5 @@
 use crate::ai;
+use crate::command;
 use crate::game::Game;
 use crate::game_mode::{GameMode, TurnPhase};
 
@@ -30,8 +31,8 @@ pub fn update_enemy_turn(game: &mut Game, delta_time: f32) {
         } else if let Some(idx) = game.ai_turn_queue.pop() {
             if game.units[idx].is_alive() {
                 game.units[idx].start_turn();
-                let plan = ai::plan_turn(&game.units, idx, &game.blocked_tiles);
-                ai::apply_plan(&mut game.units[idx], plan);
+                let command = ai::plan_turn(&game.units, idx, &game.blocked_tiles);
+                command::apply(game, command);
                 game.ai_acting_unit = Some(idx);
             }
         }

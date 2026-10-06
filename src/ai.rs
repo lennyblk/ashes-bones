@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use crate::command::Command;
 use crate::duel;
-use crate::movement::MovementRange;
-use crate::unit::{PendingAction, Unit, UnitState};
-use crate::{GRID_COLS, GRID_ROWS};
+use crate::movement::{self, MovementRange};
+use crate::unit::{PendingAction, Unit};
 
 /// sous ce ratio de PV, un allié est considéré comme à soigner
 const AI_HEAL_THRESHOLD: f32 = 0.5;
@@ -17,24 +17,6 @@ const SCORE_GUARDED_TILE: f32 = 8.0; // par allié collé à la case d'arrivée 
 const SCORE_SHOOTER_EXPOSED: f32 = 15.0; // tireur qui finit collé à un ennemi
 const SCORE_STEP: f32 = 0.5; // par case parcourue, pour départager à note égale
 
-/// ce que l'unité IA fait ce tour-ci
-pub struct Plan {
-    // cases de passage (vide = on agit sur place)
-    pub path: Vec<(i32, i32)>,
-    pub action: Option<PendingAction>,
-}
-
-/// applique un plan : marche puis action à l'arrivée, ou action tout de suite
-pub fn apply_plan(unit: &mut Unit, plan: Plan) {
-    unit.pending_action = plan.action;
-    if !plan.path.is_empty() {
-        unit.path = plan.path;
-        unit.state = UnitState::Walking;
-    } else if let Some(action) = plan.action {
-        unit.state = action.to_state();
-    }
-}
-
 fn distance(a: (i32, i32), b: (i32, i32)) -> i32 {
     (a.0 - b.0).abs() + (a.1 - b.1).abs()
 }
@@ -43,38 +25,11 @@ fn pos(unit: &Unit) -> (i32, i32) {
     (unit.grid_x, unit.grid_y)
 }
 
-/// cases atteignables ce tour (case actuelle comprise), les autres unités vivantes bloquent
-fn reachable(
-    units: &[Unit],
-    idx: usize,
-    blocked_tiles: &[(i32, i32)],
-) -> (Vec<(i32, i32)>, HashMap<(i32, i32), (i32, i32)>) {
-    let mut occupied = blocked_tiles.to_vec();
-    for (i, other) in units.iter().enumerate() {
-        if i != idx && other.is_alive() {
-            occupied.push(pos(other));
-        }
-    }
-    let unit = &units[idx];
-    MovementRange::compute_movement_range(
-        unit.grid_x,
-        unit.grid_y,
-        unit.move_points_remaining,
-        GRID_COLS,
-        GRID_ROWS,
-        &occupied,
-    )
-}
-
-fn plan_to(
-    units: &[Unit],
-    idx: usize,
-    came_from: &HashMap<(i32, i32), (i32, i32)>,
-    destination: (i32, i32),
-    action: Option<PendingAction>,
-) -> Plan {
-    Plan {
-        path: MovementRange::build_waypoints(came_from, pos(&units[idx]), destination),
+/// aller sur `destination` puis faire `action` à l'arrivée
+fn act(idx: usize, destination: (i32, i32), action: Option<PendingAction>) -> Command {
+    Command::Act {
+        unit: idx,
+        to: destination,
         action,
     }
 }
@@ -116,7 +71,7 @@ fn best_attack(
     idx: usize,
     tiles: &[(i32, i32)],
     came_from: &HashMap<(i32, i32), (i32, i32)>,
-) -> Option<Plan> {
+) -> Option<Command> {
     let me = &units[idx];
     let start = pos(me);
     let mut best: Option<(f32, usize, (i32, i32))> = None;
@@ -135,25 +90,12 @@ fn best_attack(
             }
         }
     }
-    best.map(|(_, target_idx, tile)| {
-        plan_to(
-            units,
-            idx,
-            came_from,
-            tile,
-            Some(PendingAction::Attack(target_idx)),
-        )
-    })
+    best.map(|(_, target_idx, tile)| act(idx, tile, Some(PendingAction::Attack(target_idx))))
 }
 
 /// pas d'attaque possible : on se rapproche de l'ennemi le plus proche,
 /// en préférant à distance égale une case collée à un allié
-fn approach_closest_enemy(
-    units: &[Unit],
-    idx: usize,
-    tiles: &[(i32, i32)],
-    came_from: &HashMap<(i32, i32), (i32, i32)>,
-) -> Option<Plan> {
+fn approach_closest_enemy(units: &[Unit], idx: usize, tiles: &[(i32, i32)]) -> Option<Command> {
     let me = &units[idx];
     let target = units
         .iter()
@@ -171,7 +113,7 @@ fn approach_closest_enemy(
     let destination = tiles
         .iter()
         .min_by_key(|&&tile| (distance(tile, pos(target)), -allies_next_to(tile)))?;
-    Some(plan_to(units, idx, came_from, *destination, None))
+    Some(act(idx, *destination, None))
 }
 
 /// parmi les alliés blessés, prend celui avec le ratio de PV le plus bas (sous le seuil)
@@ -190,9 +132,9 @@ fn find_ally_to_heal(units: &[Unit], idx: usize) -> Option<usize> {
 
 /// ordre de priorité : soigner à portée > meilleure attaque (en bougeant si besoin)
 /// > marcher vers un blessé > se rapprocher d'un ennemi
-pub fn plan_turn(units: &[Unit], idx: usize, blocked_tiles: &[(i32, i32)]) -> Plan {
+pub fn plan_turn(units: &[Unit], idx: usize, blocked_tiles: &[(i32, i32)]) -> Command {
     let me = &units[idx];
-    let (tiles, came_from) = reachable(units, idx, blocked_tiles);
+    let (tiles, came_from) = movement::reachable(units, idx, blocked_tiles);
     let heal_target = if me.can_heal {
         find_ally_to_heal(units, idx)
     } else {
@@ -201,25 +143,19 @@ pub fn plan_turn(units: &[Unit], idx: usize, blocked_tiles: &[(i32, i32)]) -> Pl
 
     if let Some(ally_idx) = heal_target {
         if distance(pos(me), pos(&units[ally_idx])) <= me.attack_range {
-            return Plan {
-                path: Vec::new(),
-                action: Some(PendingAction::Heal(ally_idx)),
-            };
+            return act(idx, pos(me), Some(PendingAction::Heal(ally_idx)));
         }
     }
-    if let Some(plan) = best_attack(units, idx, &tiles, &came_from) {
-        return plan;
+    if let Some(attack) = best_attack(units, idx, &tiles, &came_from) {
+        return attack;
     }
     if let Some(ally_idx) = heal_target {
         let ally_pos = pos(&units[ally_idx]);
         if let Some(&destination) = tiles.iter().min_by_key(|&&t| distance(t, ally_pos)) {
             let in_range = distance(destination, ally_pos) <= me.attack_range;
             let action = in_range.then_some(PendingAction::Heal(ally_idx));
-            return plan_to(units, idx, &came_from, destination, action);
+            return act(idx, destination, action);
         }
     }
-    approach_closest_enemy(units, idx, &tiles, &came_from).unwrap_or(Plan {
-        path: Vec::new(),
-        action: None,
-    })
+    approach_closest_enemy(units, idx, &tiles).unwrap_or(act(idx, pos(me), None))
 }

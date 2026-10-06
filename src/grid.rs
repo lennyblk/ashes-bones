@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-
 use raylib::prelude::*;
 
+use crate::command::Command;
 use crate::duel::{self, DuelConditions};
 use crate::game::Game;
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::input;
-use crate::movement::MovementRange;
+use crate::movement::{self, MovementRange};
 use crate::unit::{PendingAction, Unit, UnitState, two_mut};
-use crate::{GRID_COLS, GRID_ROWS};
 
 /// cases à surligner sur la grille, calculées pendant les inputs et utilisées au dessin
 pub struct GridHighlights {
@@ -34,14 +32,14 @@ pub struct DuelPreview {
 }
 
 /// inputs du joueur sur la grille : sélection, déplacement, attaque, soin,
-/// choix de la case d'arrivée, annulation
+/// choix de la case d'arrivée, annulation. Renvoie l'action jouée ce clic, à appliquer
 pub fn update(
     game: &mut Game,
     rl: &RaylibHandle,
     click_consumed: bool,
     cursor_grid_x: i32,
     cursor_grid_y: i32,
-) -> GridHighlights {
+) -> (GridHighlights, Option<Command>) {
     // pendant le tour ennemi on ne contrôle aucune unité : sinon on pourrait bouger
     // pendant que l'IA joue, puis rebouger à son tour (points de mouvement remis à neuf)
     let player_turn = game.current_turn == TurnPhase::PlayerTurn;
@@ -49,29 +47,13 @@ pub fn update(
         game.selected_unit = None;
     }
 
-    let (move_range, came_from) = if let Some(sel) = game.selected_unit {
-        if game.game_mode == GameMode::GridScreen {
-            // toute autre unité vivante (alliée ou ennemie) bloque le passage
-            let mut occupied = game.blocked_tiles.clone();
-            for (i, u) in game.units.iter().enumerate() {
-                if i != sel && u.is_alive() {
-                    occupied.push((u.grid_x, u.grid_y));
-                }
-            }
-            MovementRange::compute_movement_range(
-                game.units[sel].grid_x,
-                game.units[sel].grid_y,
-                game.units[sel].move_points_remaining,
-                GRID_COLS,
-                GRID_ROWS,
-                &occupied,
-            )
-        } else {
-            (Vec::new(), HashMap::new())
+    let move_range = match game.selected_unit {
+        Some(sel) if game.game_mode == GameMode::GridScreen => {
+            movement::reachable(&game.units, sel, &game.blocked_tiles).0
         }
-    } else {
-        (Vec::new(), HashMap::new())
+        _ => Vec::new(),
     };
+    let mut command = None;
 
     let clicked = input::mouse_is_clicked(rl);
 
@@ -107,14 +89,15 @@ pub fn update(
 
     // if pour bouger le personnage sélectionné
     if let Some(sel) = game.selected_unit {
-        if input::handle_movement_normal_click(
+        if let Some(cmd) = input::handle_movement_normal_click(
             rl,
-            &mut game.units[sel],
+            sel,
+            &game.units[sel],
             &move_range,
-            &came_from,
             cursor_grid_x,
             cursor_grid_y,
         ) {
+            command = Some(cmd);
             game.selected_unit = None;
         }
     }
@@ -153,10 +136,10 @@ pub fn update(
                 && u.grid_y == cursor_grid_y
         }) {
             let (mover, enemy) = two_mut(&mut game.units, sel, enemy_idx);
-            if input::handle_movement_action_click(
+            if let Some(cmd) = input::handle_movement_action_click(
                 rl,
+                sel,
                 mover,
-                &came_from,
                 &valid_attack_positions,
                 !valid_attack_positions.is_empty(),
                 enemy,
@@ -164,9 +147,8 @@ pub fn update(
                 cursor_grid_x,
                 cursor_grid_y,
             ) {
-                if mover.state != UnitState::ChoosingPosition {
-                    game.selected_unit = None;
-                }
+                command = Some(cmd);
+                game.selected_unit = None;
             }
         }
     }
@@ -186,18 +168,18 @@ pub fn update(
                     && u.grid_y == cursor_grid_y
             }) {
                 let (mover, ally) = two_mut(&mut game.units, sel, ally_idx);
-                if input::handle_movement_action_click(
+                if let Some(cmd) = input::handle_movement_action_click(
                     rl,
+                    sel,
                     mover,
-                    &came_from,
                     &valid_heal_positions,
                     !valid_heal_positions.is_empty(),
                     ally,
                     PendingAction::Heal(ally_idx),
                     cursor_grid_x,
                     cursor_grid_y,
-                ) && mover.state != UnitState::ChoosingPosition
-                {
+                ) {
+                    command = Some(cmd);
                     game.selected_unit = None;
                 }
             }
@@ -217,14 +199,15 @@ pub fn update(
     };
 
     if let Some(sel) = game.selected_unit {
-        if input::handle_movement_choosing_position_click(
+        if let Some(cmd) = input::handle_movement_choosing_position_click(
             rl,
-            &mut game.units[sel],
-            &came_from,
+            sel,
+            &game.units[sel],
             &choosing_positions,
             cursor_grid_x,
             cursor_grid_y,
         ) {
+            command = Some(cmd);
             game.selected_unit = None;
         }
     }
@@ -243,14 +226,15 @@ pub fn update(
         (cursor_grid_x, cursor_grid_y),
     );
 
-    GridHighlights {
+    let highlights = GridHighlights {
         move_range,
         choosing_positions,
         attackable_enemy_positions,
         healable_ally_positions,
         duel_preview,
         position_scores,
-    }
+    };
+    (highlights, command)
 }
 
 fn distance(a: (i32, i32), b: (i32, i32)) -> i32 {

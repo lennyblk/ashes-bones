@@ -1,4 +1,5 @@
 use crate::unit::Unit;
+use crate::{GRID_COLS, GRID_ROWS};
 use std::collections::HashMap;
 
 pub struct MovementRange {
@@ -122,4 +123,28 @@ impl MovementRange {
         }
         waypoints
     }
+}
+
+/// cases atteignables par `units[idx]` ce tour (case actuelle comprise) et le chemin pour
+/// y aller. Toute autre unité vivante, alliée ou ennemie, bloque le passage
+pub fn reachable(
+    units: &[Unit],
+    idx: usize,
+    blocked_tiles: &[(i32, i32)],
+) -> (Vec<(i32, i32)>, HashMap<(i32, i32), (i32, i32)>) {
+    let mut occupied = blocked_tiles.to_vec();
+    for (i, other) in units.iter().enumerate() {
+        if i != idx && other.is_alive() {
+            occupied.push((other.grid_x, other.grid_y));
+        }
+    }
+    let unit = &units[idx];
+    MovementRange::compute_movement_range(
+        unit.grid_x,
+        unit.grid_y,
+        unit.move_points_remaining,
+        GRID_COLS,
+        GRID_ROWS,
+        &occupied,
+    )
 }
