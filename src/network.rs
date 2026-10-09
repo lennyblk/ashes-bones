@@ -4,13 +4,17 @@
 //!   WAIT 3
 //!   END
 
-use std::io::{self, BufRead, BufReader, Write};
-use std::net::{Shutdown, TcpStream};
+use std::io::{self, BufRead, BufReader, ErrorKind, Write};
+use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
+use std::time::Duration;
 
 use crate::command::Command;
 use crate::unit::PendingAction;
+
+pub const PORT: u16 = 6666;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// ce que la boucle du jeu récupère de la connexion
 pub enum Event {
@@ -71,6 +75,71 @@ impl Drop for Connection {
     fn drop(&mut self) {
         let _ = self.stream.shutdown(Shutdown::Both);
     }
+}
+
+/// l'hôte attend son adversaire sans geler la fenêtre. Le jeter annule l'attente
+pub struct Host {
+    listener: TcpListener,
+}
+
+impl Host {
+    pub fn new() -> io::Result<Host> {
+        // 0.0.0.0 = accepter les connexions qui arrivent par n'importe quelle carte réseau
+        let listener = TcpListener::bind(("0.0.0.0", PORT))?;
+        // accept() répondra « personne » tout de suite au lieu d'attendre
+        listener.set_nonblocking(true)?;
+        Ok(Host { listener })
+    }
+
+    /// à appeler à chaque frame : None tant que personne n'est arrivé
+    pub fn try_accept(&self) -> Option<io::Result<Connection>> {
+        match self.listener.accept() {
+            // le tunnel, lui, doit rester bloquant : c'est le thread lecteur qui attend dessus
+            Ok((stream, _)) => Some(
+                stream
+                    .set_nonblocking(false)
+                    .and_then(|_| Connection::start(stream)),
+            ),
+            Err(e) if e.kind() == ErrorKind::WouldBlock => None,
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
+/// l'invité se connecte dans un thread : connect() peut attendre plusieurs secondes
+pub struct Join {
+    result: Receiver<io::Result<Connection>>,
+}
+
+impl Join {
+    pub fn new(address: String) -> Join {
+        let (sender, result) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = sender.send(connect(&address));
+        });
+        Join { result }
+    }
+
+    /// à appeler à chaque frame : None tant que la tentative est en cours
+    pub fn try_connect(&self) -> Option<io::Result<Connection>> {
+        match self.result.try_recv() {
+            Ok(result) => Some(result),
+            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Disconnected) => {
+                Some(Err(io::Error::other("tentative de connexion interrompue")))
+            }
+        }
+    }
+}
+
+fn connect(address: &str) -> io::Result<Connection> {
+    // "192.168.1.20" + le port -> adresse réseau utilisable par connect
+    let target = (address, PORT)
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| io::Error::new(ErrorKind::InvalidInput, "adresse introuvable"))?;
+    let stream = TcpStream::connect_timeout(&target, CONNECT_TIMEOUT)?;
+    Connection::start(stream)
 }
 
 /// Command -> ligne de texte à envoyer
