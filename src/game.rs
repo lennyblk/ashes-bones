@@ -102,6 +102,27 @@ impl Game {
     }
 }
 
+impl Game {
+    /// case de chaque unité, dans l'ordre de `units` : ce que l'hôte envoie à l'invité
+    pub fn unit_positions(&self) -> Vec<(i32, i32)> {
+        self.units.iter().map(|u| (u.grid_x, u.grid_y)).collect()
+    }
+
+    /// place les unités comme chez l'hôte. false si la liste reçue ne colle pas
+    pub fn place_units(&mut self, positions: &[(i32, i32)]) -> bool {
+        let valid = positions.len() == self.units.len()
+            && positions
+                .iter()
+                .all(|&(x, y)| (0..GRID_COLS).contains(&x) && (0..GRID_ROWS).contains(&y));
+        if valid {
+            for (unit, &(x, y)) in self.units.iter_mut().zip(positions) {
+                place_unit(unit, x, y);
+            }
+        }
+        valid
+    }
+}
+
 fn grid_to_screen_x(grid_x: i32) -> f32 {
     let x = (grid_x * TILE_SIZE) as f32 + (-40.0);
     x

@@ -20,9 +20,15 @@ mod turn;
 mod ui;
 mod unit;
 
+use std::io;
+use std::time::Duration;
+
 use command::Command;
 use cursor::{CursorType, Cursors};
 use game::Game;
+use game_mode::GameMode;
+use network::{Connection, Event, Message};
+use unit::Faction;
 use unit::{Unit, UnitState};
 
 const TILE_SIZE: i32 = 48;
@@ -31,7 +37,78 @@ const GRID_ROWS: i32 = 16;
 const SCREEN_WIDTH: i32 = GRID_COLS * TILE_SIZE;
 const SCREEN_HEIGHT: i32 = GRID_ROWS * TILE_SIZE;
 
+/// place dans la partie en ligne. L'hôte choisit sa faction et tire le placement
+enum Role {
+    Host(Faction),
+    Guest,
+}
+
+/// online pour le dev : `cargo run -- host [human|undead]` ou `cargo run -- join <ip>`.
+/// Sans argument : None, partie solo. Bloque jusqu'à la connexion, avant d'ouvrir la fenêtre
+fn connect_from_args() -> Option<(Connection, Role)> {
+    let args: Vec<String> = std::env::args().collect();
+    let (attempt, role) = match args.get(1).map(String::as_str) {
+        Some("host") => {
+            let faction = match args.get(2) {
+                Some(name) => network::parse_faction(name)
+                    .unwrap_or_else(|| quit("faction : human ou undead")),
+                None => Faction::Human,
+            };
+            println!(
+                "en attente d'un adversaire sur le port {}...",
+                network::PORT
+            );
+            let host = network::Host::new().unwrap_or_else(|e| quit(e));
+            (wait_for(|| host.try_accept()), Role::Host(faction))
+        }
+        Some("join") => {
+            let Some(address) = args.get(2) else {
+                quit("usage : cargo run -- join <ip>");
+            };
+            println!("connexion à {address}...");
+            let join = network::Join::new(address.clone());
+            (wait_for(|| join.try_connect()), Role::Guest)
+        }
+        _ => return None,
+    };
+    let connection = attempt.unwrap_or_else(|e| quit(e));
+    println!("connecté");
+    Some((connection, role))
+}
+
+/// l'hôte envoie le placement dès que sa fenêtre est prête : attente très courte
+fn wait_for_start(connection: &Connection) -> (Faction, Vec<(i32, i32)>) {
+    loop {
+        match connection.poll() {
+            Some(Event::Message(Message::Start {
+                host_faction,
+                positions,
+            })) => return (host_faction, positions),
+            Some(Event::Message(_)) => quit("message inattendu avant le début de partie"),
+            Some(Event::Disconnected) => quit("l'hôte s'est déconnecté"),
+            None => std::thread::sleep(Duration::from_millis(10)),
+        }
+    }
+}
+
+/// redemande à chaque instant jusqu'à avoir une réponse : pas de fenêtre à dessiner ici
+fn wait_for(mut attempt: impl FnMut() -> Option<io::Result<Connection>>) -> io::Result<Connection> {
+    loop {
+        if let Some(result) = attempt() {
+            return result;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn quit(error: impl std::fmt::Display) -> ! {
+    eprintln!("connexion impossible : {error}");
+    std::process::exit(1);
+}
+
 fn main() {
+    let network = connect_from_args();
+
     // init window
     let (mut rl, thread) = raylib::init()
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -66,6 +143,28 @@ fn main() {
     let tile_map = map::TileMap::load(&mut rl, &thread, "assets/maps/ashes-bones-map.tmx");
 
     let mut game = Game::new(&rl, tile_map.blocked_tiles.clone());
+
+    // online : l'hôte a tiré le placement et l'envoie avec sa faction, l'invité l'attend,
+    // l'applique et prend l'autre faction. Les deux arrivent direct sur la grille
+    if let Some((connection, role)) = &network {
+        game.player_faction = match role {
+            Role::Host(faction) => {
+                connection.send(&Message::Start {
+                    host_faction: *faction,
+                    positions: game.unit_positions(),
+                });
+                *faction
+            }
+            Role::Guest => {
+                let (host_faction, positions) = wait_for_start(connection);
+                if !game.place_units(&positions) {
+                    quit("placement de départ invalide");
+                }
+                host_faction.opposite()
+            }
+        };
+        game.game_mode = GameMode::GridScreen;
+    }
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {

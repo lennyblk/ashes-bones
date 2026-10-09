@@ -1,4 +1,5 @@
 //!   format d'échange
+//!   START human 3 4 1 7 ...   faction de l'hôte, puis la case de chaque unité
 //!   ACT 3 5 7       l'unité 3 va en (5,7)
 //!   ACT 3 5 7 A 9   ... puis attaque l'unité 9 (H 9 = soigne)
 //!   WAIT 3
@@ -11,14 +12,25 @@ use std::thread;
 use std::time::Duration;
 
 use crate::command::Command;
-use crate::unit::PendingAction;
+use crate::unit::{Faction, PendingAction};
 
 pub const PORT: u16 = 6666;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// tout ce qui passe dans le tuyau
+pub enum Message {
+    /// début de partie (hôte -> invité) : faction choisie par l'hôte et case de chaque
+    /// unité, dans l'ordre de game.units
+    Start {
+        host_faction: Faction,
+        positions: Vec<(i32, i32)>,
+    },
+    Command(Command),
+}
+
 /// ce que la boucle du jeu récupère de la connexion
 pub enum Event {
-    Command(Command),
+    Message(Message),
     Disconnected,
 }
 
@@ -40,10 +52,10 @@ impl Connection {
         thread::spawn(move || {
             for line in reader.lines() {
                 // ligne illisible ou erreur : on coupe plutôt que de laisser les parties diverger
-                let Some(command) = line.ok().and_then(|l| decode(&l)) else {
+                let Some(message) = line.ok().and_then(|l| decode(&l)) else {
                     break;
                 };
-                if sender.send(Event::Command(command)).is_err() {
+                if sender.send(Event::Message(message)).is_err() {
                     return; // la Connection a été jetée, plus personne n'écoute
                 }
             }
@@ -55,8 +67,8 @@ impl Connection {
     }
 
     /// false si l'envoi a échoué (adversaire parti)
-    pub fn send(&self, command: Command) -> bool {
-        writeln!(&self.stream, "{}", encode(command)).is_ok()
+    pub fn send(&self, message: &Message) -> bool {
+        writeln!(&self.stream, "{}", encode(message)).is_ok()
     }
 
     /// prochain événement reçu, ou None s'il n'y a rien : ne bloque jamais
@@ -142,8 +154,55 @@ fn connect(address: &str) -> io::Result<Connection> {
     Connection::start(stream)
 }
 
-/// Command -> ligne de texte à envoyer
-pub fn encode(command: Command) -> String {
+/// Message -> ligne de texte à envoyer
+fn encode(message: &Message) -> String {
+    match message {
+        Message::Start {
+            host_faction,
+            positions,
+        } => {
+            let coords: Vec<String> = positions.iter().map(|(x, y)| format!("{x} {y}")).collect();
+            format!("START {} {}", faction_name(*host_faction), coords.join(" "))
+        }
+        Message::Command(command) => encode_command(*command),
+    }
+}
+
+/// ligne reçue -> Message. None si la ligne ne respecte pas le format
+fn decode(line: &str) -> Option<Message> {
+    let words: Vec<&str> = line.split_whitespace().collect();
+    if let ["START", faction, coords @ ..] = words.as_slice() {
+        let numbers: Vec<i32> = coords
+            .iter()
+            .map(|w| w.parse().ok())
+            .collect::<Option<_>>()?;
+        if !numbers.len().is_multiple_of(2) {
+            return None;
+        }
+        return Some(Message::Start {
+            host_faction: parse_faction(faction)?,
+            positions: numbers.chunks(2).map(|p| (p[0], p[1])).collect(),
+        });
+    }
+    decode_command(&words).map(Message::Command)
+}
+
+pub fn faction_name(faction: Faction) -> &'static str {
+    match faction {
+        Faction::Human => "human",
+        Faction::Undead => "undead",
+    }
+}
+
+pub fn parse_faction(name: &str) -> Option<Faction> {
+    match name {
+        "human" => Some(Faction::Human),
+        "undead" => Some(Faction::Undead),
+        _ => None,
+    }
+}
+
+fn encode_command(command: Command) -> String {
     match command {
         Command::Act { unit, to, action } => {
             let action = match action {
@@ -158,10 +217,8 @@ pub fn encode(command: Command) -> String {
     }
 }
 
-/// ligne reçue -> Command. None si la ligne ne respecte pas le format
-pub fn decode(line: &str) -> Option<Command> {
-    let words: Vec<&str> = line.split_whitespace().collect();
-    let command = match words.as_slice() {
+fn decode_command(words: &[&str]) -> Option<Command> {
+    let command = match words {
         ["ACT", unit, x, y] => Command::Act {
             unit: unit.parse().ok()?,
             to: (x.parse().ok()?, y.parse().ok()?),
