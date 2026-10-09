@@ -13,6 +13,7 @@ mod input;
 mod map;
 mod minigame;
 mod movement;
+mod net;
 mod render;
 mod screens;
 mod turn;
