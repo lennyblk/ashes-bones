@@ -73,7 +73,11 @@ pub fn draw_title_screen(
         d.draw_text_ex(
             &assets.alert_font,
             notice,
-            Vector2::new(SCREEN_WIDTH as f32 / 2.0 - text_size.x / 2.0, 40.0),
+            // sous le dernier bouton du menu (Exit)
+            Vector2::new(
+                SCREEN_WIDTH as f32 / 2.0 - text_size.x / 2.0,
+                hud.btn_exit_title_screen.y + hud.btn_exit_title_screen.height + 30.0,
+            ),
             40.0,
             1.0,
             Color::RED,

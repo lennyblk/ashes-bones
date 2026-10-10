@@ -362,7 +362,12 @@ fn main() {
             game.game_mode == GameMode::GridScreen && !game.units.iter().any(|u| u.is_busy());
         if board_idle && game.current_turn == TurnPhase::EnemyTurn {
             if let Some(command) = incoming.pop_front() {
-                command::apply(&mut game, command);
+                if command::is_legal(&game, command, game.player_faction.opposite()) {
+                    command::apply(&mut game, command);
+                } else {
+                    game.reset(&rl, GameMode::TitleScreen);
+                    game.title_notice = Some("Invalid data from opponent");
+                }
             }
         }
 
