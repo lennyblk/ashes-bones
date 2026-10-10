@@ -27,6 +27,8 @@ pub struct Game {
     pub guide_dragging: bool,
     // écran Multiplayer : IP de la partie sélectionnée dans la liste
     pub lobby_selected: Option<IpAddr>,
+    // écran Multiplayer : échec de la connexion, affiché sous la liste
+    pub lobby_error: Option<&'static str>,
     // écran Host game : gardé d'une partie à l'autre (pas remis à zéro par reset)
     pub host_form: HostForm,
 
@@ -91,6 +93,7 @@ impl Game {
             guide_scroll: 0.0,
             guide_dragging: false,
             lobby_selected: None,
+            lobby_error: None,
             host_form: HostForm::new(),
 
             current_turn: TurnPhase::PlayerTurn,

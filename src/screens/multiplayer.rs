@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use raylib::prelude::*;
 
 use crate::game::Game;
@@ -18,6 +20,12 @@ const ROW_HEIGHT: f32 = 46.0;
 const ROW_GAP: f32 = 4.0;
 const ROWS_TOP: f32 = 210.0;
 
+/// ce que la liste demande à main.rs, qui possède le réseau
+pub enum LobbyAction {
+    Join(IpAddr),
+    Cancel,
+}
+
 /// rectangle de la ligne `i` de la liste
 pub fn row_rect(i: usize) -> Rectangle {
     Rectangle {
@@ -35,18 +43,25 @@ pub fn update(
     mouse_position: Vector2,
     browser: Option<&mut Browser>,
     click_consumed: bool,
-) {
+    connecting: bool,
+) -> Option<LobbyAction> {
     if game.game_mode != GameMode::MultiplayerScreen {
-        return;
+        return None;
     }
     let clicked = input::mouse_is_clicked(rl) && !click_consumed;
+    // connexion en cours : la liste est figée, Back devient Cancel
+    if connecting {
+        let cancel = input::is_button_clicked(mouse_position, clicked, hud.btn_mp_back);
+        return cancel.then_some(LobbyAction::Cancel);
+    }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_mp_back) {
         game.game_mode = GameMode::TitleScreen;
         game.lobby_selected = None;
-        return;
+        game.lobby_error = None;
+        return None;
     }
     let Some(browser) = browser else {
-        return; // port déjà pris : rien à lister
+        return None; // port déjà pris : rien à lister
     };
     if input::is_button_clicked(mouse_position, clicked, hud.btn_mp_refresh) {
         browser.clear();
@@ -71,4 +86,8 @@ pub fn update(
     if input::is_button_clicked(mouse_position, clicked, hud.btn_mp_host) {
         game.game_mode = GameMode::HostScreen;
     }
+    if input::is_button_clicked(mouse_position, clicked, hud.btn_mp_join) {
+        return game.lobby_selected.map(LobbyAction::Join);
+    }
+    None
 }

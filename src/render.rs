@@ -536,6 +536,8 @@ pub fn draw_multiplayer_screen(
     mouse_position: Vector2,
     browser: Option<&Browser>,
     selected: Option<IpAddr>,
+    error: Option<&str>,
+    connecting: bool,
 ) {
     draw_fullscreen_texture(d, &assets.menu_background_texture);
 
@@ -750,9 +752,59 @@ pub fn draw_multiplayer_screen(
         );
     }
 
-    ui::draw_text_button(d, heading_font, hud.btn_mp_back, "Back");
-    draw_texture_in(d, &assets.btn_host, hud.btn_mp_host, Color::WHITE);
-    draw_texture_in(d, &assets.btn_join, hud.btn_mp_join, Color::WHITE);
+    // connexion en cours : liste assombrie, message par-dessus
+    if connecting {
+        d.draw_rectangle_rec(panel, Color::new(0, 0, 0, 170));
+        let name = games
+            .iter()
+            .find(|g| Some(g.address) == selected)
+            .map_or(String::from("the game"), |g| g.info.name.clone());
+        let text = fit_text(
+            font,
+            &format!("Connecting to {name}..."),
+            30.0,
+            panel.width - 48.0,
+        );
+        let size = font.measure_text(&text, 30.0, 1.0);
+        d.draw_text_ex(
+            font,
+            &text,
+            Vector2::new(
+                panel.x + panel.width / 2.0 - size.x / 2.0,
+                panel.y + panel.height / 2.0 - size.y / 2.0,
+            ),
+            30.0,
+            1.0,
+            Color::WHITE,
+        );
+    }
+    if let Some(error) = error {
+        let size = font.measure_text(error, 18.0, 1.0);
+        d.draw_text_ex(
+            font,
+            error,
+            Vector2::new(
+                SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0,
+                panel.y + panel.height + 14.0,
+            ),
+            18.0,
+            1.0,
+            LOBBY_UNDEAD,
+        );
+    }
+
+    let back_label = if connecting { "Cancel" } else { "Back" };
+    ui::draw_text_button(d, heading_font, hud.btn_mp_back, back_label);
+    if !connecting {
+        draw_texture_in(d, &assets.btn_host, hud.btn_mp_host, Color::WHITE);
+        // grisé tant qu'aucune partie n'est sélectionnée
+        let join_tint = if selected.is_some() {
+            Color::WHITE
+        } else {
+            Color::new(110, 110, 110, 200)
+        };
+        draw_texture_in(d, &assets.btn_join, hud.btn_mp_join, join_tint);
+    }
 
     d.draw_texture_ex(
         assets.cursor_texture(CursorType::Normal),
