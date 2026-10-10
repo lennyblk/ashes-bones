@@ -28,7 +28,8 @@ use command::Command;
 use cursor::{CursorType, Cursors};
 use game::Game;
 use game_mode::{GameMode, TurnPhase};
-use network::{Browser, Connection, Event, Message};
+use network::{Announcer, Browser, Connection, Event, GameInfo, Message};
+use screens::host::HostAction;
 use unit::Faction;
 use unit::{Unit, UnitState};
 
@@ -190,12 +191,16 @@ fn main() {
         game.online = true;
     }
     // l'hôte retire le placement à chaque revanche
-    let is_host = matches!(network, Some((_, Role::Host(_))));
+    let mut is_host = matches!(network, Some((_, Role::Host(_))));
     let mut connection: Option<Connection> = network.map(|(connection, _)| connection);
     // commandes reçues de l'adversaire, pas encore jouées
     let mut incoming: VecDeque<Command> = VecDeque::new();
     // écran Multiplayer : écoute des parties annoncées sur le réseau local
     let mut browser: Option<Browser> = None;
+    // hôte en attente d'un adversaire (écran Host) : le port 6666 est ouvert
+    let mut host_listener: Option<network::Host> = None;
+    // annonce de ma partie sur le réseau local : pendant l'attente ("open") et le match ("full")
+    let mut announcer: Option<Announcer> = None;
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -250,7 +255,64 @@ fn main() {
         );
         // après multiplayer : son Back et celui de l'écran Host sont au même endroit, le clic
         // qui revient à la liste ne doit pas aussi la quitter dans la même frame
-        screens::host::update(&mut game, &mut rl, &hud, mouse_position, click_consumed);
+        let host_action = screens::host::update(
+            &mut game,
+            &mut rl,
+            &hud,
+            mouse_position,
+            click_consumed,
+            host_listener.is_some(),
+        );
+        match host_action {
+            Some(HostAction::Open) => {
+                let form = &game.host_form;
+                let info = GameInfo {
+                    name: form.game_name.trim().to_string(),
+                    host_name: form.player_name.trim().to_string(),
+                    host_faction: form.faction,
+                    full: false,
+                };
+                match (network::Host::new(), Announcer::new(info)) {
+                    (Ok(listener), Ok(new_announcer)) => {
+                        host_listener = Some(listener);
+                        announcer = Some(new_announcer);
+                    }
+                    _ => {
+                        game.host_form.error =
+                            Some("Port 6666 busy: is a game already hosted on this PC?")
+                    }
+                }
+            }
+            Some(HostAction::Cancel) => host_listener = None,
+            None => {}
+        }
+        // l'hôte attend : dès que quelqu'un arrive, la partie démarre comme avec `-- host`
+        let accepted = host_listener
+            .as_ref()
+            .and_then(|listener| listener.try_accept());
+        match accepted {
+            Some(Ok(new_connection)) => {
+                game.reset(&rl, GameMode::GridScreen);
+                game.player_faction = game.host_form.faction;
+                game.online = true;
+                is_host = true;
+                send_start(&game, &new_connection);
+                connection = Some(new_connection);
+                host_listener = None;
+                if let Some(announcer) = &mut announcer {
+                    announcer.info.full = true;
+                }
+            }
+            Some(Err(_)) => {
+                host_listener = None;
+                game.host_form.error = Some("Connection failed, try again");
+            }
+            None => {}
+        }
+        // quitter l'écran Host pendant l'attente (Échap) = annuler
+        if game.game_mode != GameMode::HostScreen {
+            host_listener = None;
+        }
         if screens::pause::update(&mut game, &rl, &hud, mouse_position) {
             break;
         }
@@ -373,6 +435,13 @@ fn main() {
         }
         // en ligne, revenir à l'écran titre (adversaire parti, Back de la pause ou de fin de
         // partie) = quitter la partie : on ferme la connexion, l'adversaire en est prévenu
+        // plus d'attente ni de partie : on ne s'annonce plus, la partie disparaît des listes
+        if host_listener.is_none() && connection.is_none() {
+            announcer = None;
+        }
+        if let Some(announcer) = &mut announcer {
+            announcer.tick();
+        }
         if connection.is_some() && game.game_mode == GameMode::TitleScreen {
             // pas d'écrasement de « Your opponent disconnected » quand c'est lui qui est parti
             if game.title_notice.is_none() {
@@ -479,6 +548,7 @@ fn main() {
                 &hud,
                 mouse_position,
                 &game.host_form,
+                host_listener.is_some(),
             );
         } else if game.game_mode == GameMode::MultiplayerScreen {
             render::draw_multiplayer_screen(

@@ -30,6 +30,14 @@ pub struct HostForm {
     pub faction: Faction,
     // champ où l'on écrit
     pub focus: HostField,
+    // échec de l'hébergement (port pris...), affiché sous le panneau
+    pub error: Option<&'static str>,
+}
+
+/// ce que l'écran demande à main.rs, qui possède le réseau
+pub enum HostAction {
+    Open,
+    Cancel,
 }
 
 impl HostForm {
@@ -39,6 +47,7 @@ impl HostForm {
             player_name: String::new(),
             faction: Faction::Human,
             focus: HostField::GameName,
+            error: None,
         }
     }
 
@@ -71,14 +80,20 @@ pub fn update(
     hud: &HudRects,
     mouse_position: Vector2,
     click_consumed: bool,
-) {
+    waiting: bool,
+) -> Option<HostAction> {
     if game.game_mode != GameMode::HostScreen {
-        return;
+        return None;
     }
     let clicked = input::mouse_is_clicked(rl) && !click_consumed;
+    // en attente d'un adversaire : le formulaire est figé, Back devient Cancel
+    if waiting {
+        let cancel = input::is_button_clicked(mouse_position, clicked, hud.btn_mp_back);
+        return cancel.then_some(HostAction::Cancel);
+    }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_mp_back) {
         game.game_mode = GameMode::MultiplayerScreen;
-        return;
+        return None;
     }
     let form = &mut game.host_form;
     // clic : le champ où l'on écrit, ou la faction
@@ -113,5 +128,12 @@ pub fn update(
     if rl.is_key_pressed(KEY_BACKSPACE) || rl.is_key_pressed_repeat(KEY_BACKSPACE) {
         text.pop();
     }
-    // Host game : ouvre la partie (5d)
+
+    let host_pressed = input::is_button_clicked(mouse_position, clicked, hud.btn_mp_join)
+        || rl.is_key_pressed(KEY_ENTER);
+    if host_pressed && form.is_complete() {
+        form.error = None;
+        return Some(HostAction::Open);
+    }
+    None
 }

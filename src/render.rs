@@ -772,6 +772,7 @@ pub fn draw_host_screen(
     hud: &HudRects,
     mouse_position: Vector2,
     form: &HostForm,
+    waiting: bool,
 ) {
     draw_fullscreen_texture(d, &assets.menu_background_texture);
 
@@ -908,14 +909,58 @@ pub fn draw_host_screen(
         );
     }
 
-    ui::draw_text_button(d, &assets.hud_font, hud.btn_mp_back, "Back");
-    // grisé tant qu'un nom manque
-    let host_tint = if form.is_complete() {
-        Color::WHITE
-    } else {
-        Color::new(110, 110, 110, 200)
-    };
-    draw_texture_in(d, &assets.btn_host, hud.btn_mp_join, host_tint);
+    // en attente d'un adversaire : formulaire assombri, message par-dessus
+    if waiting {
+        d.draw_rectangle_rec(panel, Color::new(0, 0, 0, 170));
+        for (text, size, color, dy) in [
+            ("Waiting for an opponent...", 30.0, Color::WHITE, -20.0),
+            (
+                "Your game is visible on the local network",
+                18.0,
+                LOBBY_MUTED,
+                22.0,
+            ),
+        ] {
+            let text_size = assets.info_font.measure_text(text, size, 1.0);
+            d.draw_text_ex(
+                &assets.info_font,
+                text,
+                Vector2::new(
+                    panel.x + panel.width / 2.0 - text_size.x / 2.0,
+                    panel.y + panel.height / 2.0 + dy,
+                ),
+                size,
+                1.0,
+                color,
+            );
+        }
+    }
+    if let Some(error) = form.error {
+        let size = assets.info_font.measure_text(error, 18.0, 1.0);
+        d.draw_text_ex(
+            &assets.info_font,
+            error,
+            Vector2::new(
+                SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0,
+                panel.y + panel.height + 14.0,
+            ),
+            18.0,
+            1.0,
+            LOBBY_UNDEAD,
+        );
+    }
+
+    let back_label = if waiting { "Cancel" } else { "Back" };
+    ui::draw_text_button(d, &assets.hud_font, hud.btn_mp_back, back_label);
+    if !waiting {
+        // grisé tant qu'un nom manque
+        let host_tint = if form.is_complete() {
+            Color::WHITE
+        } else {
+            Color::new(110, 110, 110, 200)
+        };
+        draw_texture_in(d, &assets.btn_host, hud.btn_mp_join, host_tint);
+    }
 
     d.draw_texture_ex(
         assets.cursor_texture(CursorType::Normal),
