@@ -2,7 +2,7 @@ use raylib::prelude::*;
 
 use crate::duel::DuelConditions;
 use crate::game_mode::{GameMode, TurnPhase};
-use crate::minigame::{MiniGame, ResultDisplay};
+use crate::minigame::{DuelExchange, MiniGame, ResultDisplay};
 use crate::unit::{Faction, Unit, UnitClass, UnitState};
 use crate::{GRID_COLS, GRID_ROWS, TILE_SIZE};
 
@@ -48,6 +48,8 @@ pub struct Game {
     pub minigame: Option<MiniGame>,
     pub damage_multiplier: f32,
     pub result_display: Option<ResultDisplay>, // alert qui pop au resultat du minigame
+    // online : résultats du duel en cours échangés avec l'adversaire
+    pub duel_exchange: DuelExchange,
 }
 
 impl Game {
@@ -84,6 +86,7 @@ impl Game {
             minigame: None,
             damage_multiplier: 1.0,
             result_display: None,
+            duel_exchange: DuelExchange::default(),
         }
     }
 
@@ -96,6 +99,7 @@ impl Game {
         self.active_combat = None;
         self.duel_conditions = DuelConditions::neutral();
         self.minigame = None;
+        self.duel_exchange = DuelExchange::default();
         self.attack_animation_started = false;
         self.combat_entering_timer = 0.0;
         self.combat_ready_timer = 0.0;

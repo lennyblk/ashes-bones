@@ -251,10 +251,20 @@ pub struct ResultDisplay {
     pub time_left: f32,
 }
 
+/// online : échange des résultats du duel en cours avec l'adversaire
+#[derive(Default)]
+pub struct DuelExchange {
+    pub mine: Option<TimingResult>,
+    pub to_send: Option<TimingResult>,
+    pub theirs: Option<TimingResult>,
+}
+
 pub fn handle_minigame(
     attacker: &mut Unit,
     defender: &mut Unit,
     player_faction: Faction,
+    online: bool,
+    exchange: &mut DuelExchange,
     minigame: &mut Option<MiniGame>,
     conditions: &DuelConditions,
     damage_multiplier: &mut f32,
@@ -267,40 +277,57 @@ pub fn handle_minigame(
     }
     let is_heal = matches!(attacker.pending_action, Some(PendingAction::Heal(_)));
     let player_is_attacker = attacker.faction == player_faction;
+    // je joue toujours, sauf quand c'est l'adversaire qui soigne : rien à contrer
+    let player_plays = player_is_attacker || !is_heal;
+    // l'adversaire a un résultat, sauf quand c'est moi qui soigne
+    let opponent_plays = !player_is_attacker || !is_heal;
 
-    // chaque camp joue le mini-jeu de SA classe avec SA barre. Le joueur joue toujours,
-    // sauf quand l'IA soigne un de ses alliés : rien à contrer
-    let player_result = if player_is_attacker || !is_heal {
-        if minigame.is_none() {
-            let player_class = if player_is_attacker {
+    // 1) mon mini-jeu (celui de MA classe, avec MA barre) jusqu'à avoir un résultat
+    if player_plays && exchange.mine.is_none() {
+        let game = minigame.get_or_insert_with(|| {
+            let class = if player_is_attacker {
                 attacker.class
             } else {
                 defender.class
             };
-            *minigame = Some(MiniGame::new(
-                MiniGameKind::for_class(player_class),
+            MiniGame::new(
+                MiniGameKind::for_class(class),
                 conditions.side(player_is_attacker),
                 rl,
-            ));
-        }
-        let game = minigame.as_mut().unwrap();
+            )
+        });
         game.update(rl, delta_time);
-        // on attend que le joueur ait fini
-        Some(game.result?)
-    } else {
+        let Some(result) = game.result else {
+            return None; // pas encore fini
+        };
+        exchange.mine = Some(result);
+        *minigame = None;
+        if online {
+            exchange.to_send = Some(result);
+        }
+    }
+
+    // 2) le résultat de l'autre : reçu par le réseau en ligne, tiré selon ses chances contre l'IA
+    let theirs = if !opponent_plays {
         None
+    } else if online {
+        let Some(result) = exchange.theirs.take() else {
+            return None; // on attend le sien
+        };
+        Some(result)
+    } else {
+        let roll = rl.get_random_value::<i32>(0..=999) as f32 / 1000.0;
+        Some(conditions.side(!player_is_attacker).odds().pick(roll))
     };
 
-    // le camp de l'IA ne joue pas : il tire son résultat selon les chances de sa barre
-    let result_of = |is_attacker: bool| match player_result {
-        Some(r) if is_attacker == player_is_attacker => r,
-        _ => conditions
-            .side(is_attacker)
-            .odds()
-            .pick(rl.get_random_value::<i32>(0..=999) as f32 / 1000.0),
+    // 3) les deux sont là : multiplicateur, puis animation (les dégâts tombent à sa fin)
+    let mine = exchange.mine.take();
+    let (attack, parry) = if player_is_attacker {
+        (mine, theirs)
+    } else {
+        (theirs, mine)
     };
-    let attack = result_of(true);
-    let parry = (!is_heal).then(|| result_of(false));
+    let attack = attack.expect("l'attaquant ou le soigneur a toujours un résultat");
 
     *damage_multiplier = duel_multiplier(attack, parry);
     attacker.state = if is_heal {
@@ -310,7 +337,6 @@ pub fn handle_minigame(
     };
     attacker_attack_animation.current = 0;
     attacker_attack_animation.finished = false;
-    *minigame = None;
     Some(ResultDisplay {
         attack,
         parry,

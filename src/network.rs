@@ -4,6 +4,7 @@
 //!   ACT 3 5 7 A 9   ... puis attaque l'unité 9 (H 9 = soigne)
 //!   WAIT 3
 //!   END
+//!   DUEL PERFECT    résultat de mon mini-jeu pour le duel en cours (GOOD / BAD)
 
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
@@ -12,6 +13,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::command::Command;
+use crate::minigame::TimingResult;
 use crate::unit::{Faction, PendingAction};
 
 pub const PORT: u16 = 6666;
@@ -26,6 +28,7 @@ pub enum Message {
         positions: Vec<(i32, i32)>,
     },
     Command(Command),
+    Duel(TimingResult),
 }
 
 /// ce que la boucle du jeu récupère de la connexion
@@ -165,6 +168,14 @@ fn encode(message: &Message) -> String {
             format!("START {} {}", faction_name(*host_faction), coords.join(" "))
         }
         Message::Command(command) => encode_command(*command),
+        Message::Duel(result) => format!(
+            "DUEL {}",
+            match result {
+                TimingResult::Bad => "BAD",
+                TimingResult::Good => "GOOD",
+                TimingResult::Perfect => "PERFECT",
+            }
+        ),
     }
 }
 
@@ -183,6 +194,14 @@ fn decode(line: &str) -> Option<Message> {
             host_faction: parse_faction(faction)?,
             positions: numbers.chunks(2).map(|p| (p[0], p[1])).collect(),
         });
+    }
+    if let ["DUEL", result] = words.as_slice() {
+        return Some(Message::Duel(match *result {
+            "BAD" => TimingResult::Bad,
+            "GOOD" => TimingResult::Good,
+            "PERFECT" => TimingResult::Perfect,
+            _ => return None,
+        }));
     }
     decode_command(&words).map(Message::Command)
 }

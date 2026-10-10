@@ -1035,9 +1035,29 @@ pub fn draw_combat_screen(
         minigame.draw(d, assets);
         draw_combat_factors(d, assets, conditions, player_is_attacker);
     }
+    // online : mon mini-jeu est fini (ou je n'en ai pas), on attend celui de l'adversaire
+    if attacker.state == UnitState::MiniGame && minigame.is_none() {
+        draw_waiting_for_opponent(d, assets);
+    }
     if let Some(shown) = result_display {
         draw_timing_result(d, assets, shown, player_is_attacker);
     }
+}
+
+fn draw_waiting_for_opponent(d: &mut RaylibDrawHandle, assets: &Assets) {
+    let text = "Waiting for opponent...";
+    let text_size = assets.alert_font.measure_text(text, 40.0, 1.0);
+    d.draw_text_ex(
+        &assets.alert_font,
+        text,
+        Vector2::new(
+            SCREEN_WIDTH as f32 / 2.0 - text_size.x / 2.0,
+            SCREEN_HEIGHT as f32 / 2.0 - text_size.y / 2.0 - 350.0,
+        ),
+        40.0,
+        1.0,
+        Color::WHITE,
+    );
 }
 
 /// barre de vie + nom gauche droite en fonction de ou il regarde

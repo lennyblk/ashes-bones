@@ -20,13 +20,14 @@ mod turn;
 mod ui;
 mod unit;
 
+use std::collections::VecDeque;
 use std::io;
 use std::time::Duration;
 
 use command::Command;
 use cursor::{CursorType, Cursors};
 use game::Game;
-use game_mode::GameMode;
+use game_mode::{GameMode, TurnPhase};
 use network::{Connection, Event, Message};
 use unit::Faction;
 use unit::{Unit, UnitState};
@@ -101,6 +102,14 @@ fn wait_for(mut attempt: impl FnMut() -> Option<io::Result<Connection>>) -> io::
     }
 }
 
+/// une décision du joueur local : on l'applique, et en ligne on l'envoie à l'adversaire
+fn play(game: &mut Game, connection: Option<&Connection>, command: Command) {
+    command::apply(game, command);
+    if let Some(connection) = connection {
+        connection.send(&Message::Command(command));
+    }
+}
+
 fn quit(error: impl std::fmt::Display) -> ! {
     eprintln!("connexion impossible : {error}");
     std::process::exit(1);
@@ -160,14 +169,21 @@ fn main() {
                 if !game.place_units(&positions) {
                     quit("placement de départ invalide");
                 }
+                // l'hôte joue en premier
+                game.current_turn = TurnPhase::EnemyTurn;
                 host_faction.opposite()
             }
         };
         game.game_mode = GameMode::GridScreen;
+        game.online = true;
     }
+    // le rôle ne servait qu'au démarrage
+    let connection: Option<Connection> = network.map(|(connection, _)| connection);
+    // commandes reçues de l'adversaire, pas encore jouées
+    let mut incoming: VecDeque<Command> = VecDeque::new();
 
     // run window --------------------------------------------------------------
-    while !rl.window_should_close() {
+    'game: while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
         // temps accéléré pour la grille seulement (bouton x2), le combat garde le vrai temps
         let grid_dt = if game.game_mode == game_mode::GameMode::GridScreen {
@@ -220,7 +236,7 @@ fn main() {
             && input::is_button_clicked(mouse_position, input::mouse_is_clicked(&rl), hud.btn_wait)
         {
             if let Some(sel) = game.selected_unit {
-                command::apply(&mut game, Command::Wait { unit: sel });
+                play(&mut game, connection.as_ref(), Command::Wait { unit: sel });
             }
             game.selected_unit = None;
             click_consumed = true;
@@ -265,13 +281,42 @@ fn main() {
             .all(|u| u.has_finished_turn(&enemy_snapshot, &ally_snapshot));
 
         if player_can_act && (end_turn_clicked || all_units_finished) {
-            command::apply(&mut game, Command::EndTurn);
+            play(&mut game, connection.as_ref(), Command::EndTurn);
             click_consumed = true;
+        }
+
+        // online : on range ce que l'adversaire a envoyé depuis la dernière frame
+        if let Some(connection) = &connection {
+            while let Some(event) = connection.poll() {
+                match event {
+                    Event::Message(Message::Command(command)) => incoming.push_back(command),
+                    Event::Message(Message::Start { .. }) => {} // déjà reçu au démarrage
+                    Event::Message(Message::Duel(result)) => {
+                        game.duel_exchange.theirs = Some(result)
+                    }
+                    Event::Disconnected => {
+                        eprintln!("l'adversaire s'est déconnecté");
+                        break 'game;
+                    }
+                }
+            }
+        }
+        // ses commandes s'appliquent une par une, pendant son tour, quand plus rien ne bouge
+        let board_idle =
+            game.game_mode == GameMode::GridScreen && !game.units.iter().any(|u| u.is_busy());
+        if board_idle && game.current_turn == TurnPhase::EnemyTurn {
+            if let Some(command) = incoming.pop_front() {
+                command::apply(&mut game, command);
+            }
         }
 
         turn::update_enemy_turn(&mut game, grid_dt);
 
         combat::update(&mut game, &mut assets, &rl, delta_time);
+        // online : mon résultat de mini-jeu, déposé par le combat, part chez l'adversaire
+        if let (Some(connection), Some(result)) = (&connection, game.duel_exchange.to_send.take()) {
+            connection.send(&Message::Duel(result));
+        }
 
         if game.game_mode == game_mode::GameMode::GridScreen {
             let player_alive = game
@@ -311,7 +356,7 @@ fn main() {
         let (highlights, grid_command) =
             grid::update(&mut game, &rl, click_consumed, cursor_grid_x, cursor_grid_y);
         if let Some(cmd) = grid_command {
-            command::apply(&mut game, cmd);
+            play(&mut game, connection.as_ref(), cmd);
         }
 
         let hovering_selectable_unit = game.current_turn == game_mode::TurnPhase::PlayerTurn
