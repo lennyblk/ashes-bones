@@ -31,6 +31,8 @@ pub struct Game {
     // ennemis qui restent à jouer ce tour, un par un
     pub ai_turn_queue: Vec<usize>,
     pub ai_acting_unit: Option<usize>,
+    // adversaire en ligne : pas d'IA, ses commandes arrivent par le réseau
+    pub online: bool,
 
     // (indice attaquant, indice défenseur) dans `units`
     pub active_combat: Option<(usize, usize)>,
@@ -68,6 +70,7 @@ impl Game {
             enemy_turn_delay: 0.0,
             ai_turn_queue: Vec::new(),
             ai_acting_unit: None,
+            online: false,
 
             active_combat: None,
             attacker_combat_x: 0.0,

@@ -1,4 +1,5 @@
 use crate::game::Game;
+use crate::game_mode::TurnPhase;
 use crate::movement::{self, MovementRange};
 use crate::turn;
 use crate::unit::{PendingAction, UnitState};
@@ -37,6 +38,9 @@ pub fn apply(game: &mut Game, command: Command) {
             };
         }
         Command::Wait { unit } => game.units[unit].wait(),
-        Command::EndTurn => turn::start_enemy_turn(game),
+        Command::EndTurn => match game.current_turn {
+            TurnPhase::PlayerTurn => turn::start_enemy_turn(game),
+            TurnPhase::EnemyTurn => turn::start_player_turn(game),
+        },
     }
 }
