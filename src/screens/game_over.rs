@@ -24,7 +24,13 @@ pub fn update(
         *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_retry) {
-        game.reset(rl, GameMode::GridScreen);
+        // en ligne la revanche attend l'adversaire : main.rs envoie la demande, puis l'hôte
+        // relance la partie pour les deux
+        if game.online {
+            game.rematch.mine = true;
+        } else {
+            game.reset(rl, GameMode::GridScreen);
+        }
         *click_consumed = true;
     }
     false

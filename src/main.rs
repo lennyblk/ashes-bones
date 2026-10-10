@@ -110,6 +110,24 @@ fn play(game: &mut Game, connection: Option<&Connection>, command: Command) {
     }
 }
 
+/// hôte : la partie vient d'être tirée (lancement ou revanche), on l'envoie à l'invité
+fn send_start(game: &Game, connection: &Connection) {
+    connection.send(&Message::Start {
+        host_faction: game.player_faction,
+        positions: game.unit_positions(),
+    });
+}
+
+/// invité : applique le placement de l'hôte et prend l'autre faction. L'hôte joue en premier
+fn apply_start(game: &mut Game, host_faction: Faction, positions: &[(i32, i32)]) -> bool {
+    if !game.place_units(positions) {
+        return false;
+    }
+    game.player_faction = host_faction.opposite();
+    game.current_turn = TurnPhase::EnemyTurn;
+    true
+}
+
 fn quit(error: impl std::fmt::Display) -> ! {
     eprintln!("connexion impossible : {error}");
     std::process::exit(1);
@@ -156,34 +174,29 @@ fn main() {
     // online : l'hôte a tiré le placement et l'envoie avec sa faction, l'invité l'attend,
     // l'applique et prend l'autre faction. Les deux arrivent direct sur la grille
     if let Some((connection, role)) = &network {
-        game.player_faction = match role {
+        match role {
             Role::Host(faction) => {
-                connection.send(&Message::Start {
-                    host_faction: *faction,
-                    positions: game.unit_positions(),
-                });
-                *faction
+                game.player_faction = *faction;
+                send_start(&game, connection);
             }
             Role::Guest => {
                 let (host_faction, positions) = wait_for_start(connection);
-                if !game.place_units(&positions) {
+                if !apply_start(&mut game, host_faction, &positions) {
                     quit("placement de départ invalide");
                 }
-                // l'hôte joue en premier
-                game.current_turn = TurnPhase::EnemyTurn;
-                host_faction.opposite()
             }
-        };
+        }
         game.game_mode = GameMode::GridScreen;
         game.online = true;
     }
-    // le rôle ne servait qu'au démarrage
-    let connection: Option<Connection> = network.map(|(connection, _)| connection);
+    // l'hôte retire le placement à chaque revanche
+    let is_host = matches!(network, Some((_, Role::Host(_))));
+    let mut connection: Option<Connection> = network.map(|(connection, _)| connection);
     // commandes reçues de l'adversaire, pas encore jouées
     let mut incoming: VecDeque<Command> = VecDeque::new();
 
     // run window --------------------------------------------------------------
-    'game: while !rl.window_should_close() {
+    while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
         // temps accéléré pour la grille seulement (bouton x2), le combat garde le vrai temps
         let grid_dt = if game.game_mode == game_mode::GameMode::GridScreen {
@@ -286,20 +299,63 @@ fn main() {
         }
 
         // online : on range ce que l'adversaire a envoyé depuis la dernière frame
+        let mut opponent_left = false;
         if let Some(connection) = &connection {
             while let Some(event) = connection.poll() {
                 match event {
                     Event::Message(Message::Command(command)) => incoming.push_back(command),
-                    Event::Message(Message::Start { .. }) => {} // déjà reçu au démarrage
+                    // revanche : seul l'hôte en envoie un, une fois que les deux l'ont demandée
+                    Event::Message(Message::Start {
+                        host_faction,
+                        positions,
+                    }) => {
+                        if !is_host && game.rematch.mine {
+                            game.reset(&rl, GameMode::GridScreen);
+                            incoming.clear();
+                            if !apply_start(&mut game, host_faction, &positions) {
+                                game.reset(&rl, GameMode::TitleScreen);
+                                game.title_notice = Some("Invalid data from opponent");
+                            }
+                        }
+                    }
+                    Event::Message(Message::Retry) => game.rematch.theirs = true,
                     Event::Message(Message::Duel(result)) => {
                         game.duel_exchange.theirs = Some(result)
                     }
                     Event::Disconnected => {
-                        eprintln!("l'adversaire s'est déconnecté");
-                        break 'game;
+                        opponent_left = true;
+                        break;
                     }
                 }
             }
+        }
+        if opponent_left {
+            game.reset(&rl, GameMode::TitleScreen);
+            game.title_notice = Some("Your opponent disconnected");
+        }
+        // revanche : ma demande part une seule fois. Quand les deux l'ont demandée, l'hôte
+        // tire une nouvelle partie et l'envoie (l'invité l'applique en recevant START)
+        if let Some(connection) = &connection {
+            if game.rematch.mine && !game.rematch.sent {
+                connection.send(&Message::Retry);
+                game.rematch.sent = true;
+            }
+            if is_host && game.rematch.mine && game.rematch.theirs {
+                game.reset(&rl, GameMode::GridScreen);
+                incoming.clear();
+                send_start(&game, connection);
+            }
+        }
+        // en ligne, revenir à l'écran titre (adversaire parti, Back de la pause ou de fin de
+        // partie) = quitter la partie : on ferme la connexion, l'adversaire en est prévenu
+        if connection.is_some() && game.game_mode == GameMode::TitleScreen {
+            // pas d'écrasement de « Your opponent disconnected » quand c'est lui qui est parti
+            if game.title_notice.is_none() {
+                game.title_notice = Some("You left the game");
+            }
+            connection = None;
+            incoming.clear();
+            game.online = false;
         }
         // ses commandes s'appliquent une par une, pendant son tour, quand plus rien ne bouge
         let board_idle =
@@ -380,7 +436,7 @@ fn main() {
         let mut d = rl.begin_drawing(&thread);
 
         if game.game_mode == game_mode::GameMode::TitleScreen {
-            render::draw_title_screen(&mut d, &assets, &hud, mouse_position);
+            render::draw_title_screen(&mut d, &assets, &hud, mouse_position, game.title_notice);
         } else if game.game_mode == game_mode::GameMode::FactionSelectionScreen {
             render::draw_faction_selection_screen(&mut d, &mut assets, delta_time, mouse_position);
         } else if game.game_mode == game_mode::GameMode::PauseScreen {
@@ -434,6 +490,7 @@ fn main() {
                 game.grid_speed,
                 highlights.duel_preview.as_ref(),
                 &highlights.position_scores,
+                game.rematch.mine,
             );
         }
     }

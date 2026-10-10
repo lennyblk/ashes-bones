@@ -16,6 +16,9 @@ pub fn update(
         return false;
     }
     let clicked = input::mouse_is_clicked(rl);
+    if clicked {
+        game.title_notice = None;
+    }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_exit_title_screen) {
         return true;
     }

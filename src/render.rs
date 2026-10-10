@@ -62,10 +62,23 @@ pub fn draw_title_screen(
     assets: &Assets,
     hud: &HudRects,
     mouse_position: Vector2,
+    notice: Option<&str>,
 ) {
     d.clear_background(Color::BLACK);
 
     draw_fullscreen_texture(d, &assets.title_background_texture);
+
+    if let Some(notice) = notice {
+        let text_size = assets.alert_font.measure_text(notice, 40.0, 1.0);
+        d.draw_text_ex(
+            &assets.alert_font,
+            notice,
+            Vector2::new(SCREEN_WIDTH as f32 / 2.0 - text_size.x / 2.0, 40.0),
+            40.0,
+            1.0,
+            Color::RED,
+        );
+    }
 
     draw_texture_at(d, &assets.btn_play_title_screen, hud.btn_play_title_screen);
     draw_texture_at(
@@ -730,6 +743,7 @@ pub fn draw_grid_screen(
     grid_speed: f32,
     duel_preview: Option<&DuelPreview>,
     position_scores: &[((i32, i32), i32)],
+    waiting_rematch: bool,
 ) {
     d.clear_background(Color::BEIGE);
     tile_map.draw(d);
@@ -867,6 +881,22 @@ pub fn draw_grid_screen(
             1.0,
             color,
         );
+        if waiting_rematch {
+            let text = "Waiting for opponent...";
+            let size = assets.alert_font.measure_text(text, 32.0, 1.0);
+            d.draw_text_ex(
+                &assets.alert_font,
+                text,
+                Vector2::new(
+                    SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0,
+                    // au-dessus de VICTORY / DEFEAT, les boutons de fin sont en dessous
+                    SCREEN_HEIGHT as f32 / 2.0 - text_size.y / 2.0 - size.y - 20.0,
+                ),
+                32.0,
+                1.0,
+                Color::WHITE,
+            );
+        }
         for (texture, rect) in [
             (&assets.btn_retry, hud.btn_retry),
             (&assets.btn_back, hud.btn_back),

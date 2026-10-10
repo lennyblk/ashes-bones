@@ -50,6 +50,23 @@ pub struct Game {
     pub result_display: Option<ResultDisplay>, // alert qui pop au resultat du minigame
     // online : résultats du duel en cours échangés avec l'adversaire
     pub duel_exchange: DuelExchange,
+
+    // online : revanche demandée en fin de partie
+    pub rematch: Rematch,
+
+    // message affiché sur l'écran titre (ex : adversaire déconnecté), effacé au prochain clic
+    pub title_notice: Option<&'static str>,
+}
+
+/// online : revanche en fin de partie. Elle démarre quand les deux ont cliqué Retry
+#[derive(Default)]
+pub struct Rematch {
+    /// j'ai cliqué Retry
+    pub mine: bool,
+    /// ma demande est partie chez l'adversaire
+    pub sent: bool,
+    /// l'adversaire a cliqué Retry
+    pub theirs: bool,
 }
 
 impl Game {
@@ -87,6 +104,9 @@ impl Game {
             damage_multiplier: 1.0,
             result_display: None,
             duel_exchange: DuelExchange::default(),
+
+            title_notice: None,
+            rematch: Rematch::default(),
         }
     }
 
@@ -100,6 +120,7 @@ impl Game {
         self.duel_conditions = DuelConditions::neutral();
         self.minigame = None;
         self.duel_exchange = DuelExchange::default();
+        self.rematch = Rematch::default();
         self.attack_animation_started = false;
         self.combat_entering_timer = 0.0;
         self.combat_ready_timer = 0.0;

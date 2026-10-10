@@ -5,6 +5,7 @@
 //!   WAIT 3
 //!   END
 //!   DUEL PERFECT    résultat de mon mini-jeu pour le duel en cours (GOOD / BAD)
+//!   RETRY           revanche demandée en fin de partie
 
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
@@ -29,6 +30,8 @@ pub enum Message {
     },
     Command(Command),
     Duel(TimingResult),
+    /// revanche demandée en fin de partie
+    Retry,
 }
 
 /// ce que la boucle du jeu récupère de la connexion
@@ -168,6 +171,7 @@ fn encode(message: &Message) -> String {
             format!("START {} {}", faction_name(*host_faction), coords.join(" "))
         }
         Message::Command(command) => encode_command(*command),
+        Message::Retry => String::from("RETRY"),
         Message::Duel(result) => format!(
             "DUEL {}",
             match result {
@@ -194,6 +198,9 @@ fn decode(line: &str) -> Option<Message> {
             host_faction: parse_faction(faction)?,
             positions: numbers.chunks(2).map(|p| (p[0], p[1])).collect(),
         });
+    }
+    if let ["RETRY"] = words.as_slice() {
+        return Some(Message::Retry);
     }
     if let ["DUEL", result] = words.as_slice() {
         return Some(Message::Duel(match *result {
