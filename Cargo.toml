@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 raylib = "6.0.0"
+self-replace = "1.5.0"
+self_update = { version = "1.3", default-features = false, features = ["reqwest", "rustls", "github", "archive-zip", "compression-zip-deflate"] }
 tiled = "0.16.0"
 
 [lints.clippy]

@@ -68,11 +68,26 @@ pub fn draw_title_screen(
     hud: &HudRects,
     mouse_position: Vector2,
     notice: Option<&str>,
+    update_notice: Option<&str>,
 ) {
     d.clear_background(Color::BLACK);
 
     draw_fullscreen_texture(d, &assets.title_background_texture);
 
+    if let Some(update_notice) = update_notice {
+        let size = assets.info_font.measure_text(update_notice, 20.0, 1.0);
+        d.draw_text_ex(
+            &assets.info_font,
+            update_notice,
+            Vector2::new(
+                SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0,
+                SCREEN_HEIGHT as f32 - size.y - 20.0,
+            ),
+            20.0,
+            1.0,
+            Color::GOLD,
+        );
+    }
     if let Some(notice) = notice {
         let text_size = assets.alert_font.measure_text(notice, 40.0, 1.0);
         d.draw_text_ex(

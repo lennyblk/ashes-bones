@@ -1,3 +1,6 @@
+// release Windows : pas de console noire à côté de la fenêtre du jeu
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use raylib::prelude::*;
 mod ai;
 mod animation;
@@ -19,6 +22,7 @@ mod screens;
 mod turn;
 mod ui;
 mod unit;
+mod updater;
 
 use std::collections::VecDeque;
 
@@ -31,6 +35,7 @@ use screens::host::HostAction;
 use screens::multiplayer::LobbyAction;
 use unit::Faction;
 use unit::{Unit, UnitState};
+use updater::UpdateStatus;
 
 const TILE_SIZE: i32 = 48;
 const GRID_COLS: i32 = 25;
@@ -65,6 +70,14 @@ fn apply_start(game: &mut Game, host_faction: Faction, positions: &[(i32, i32)])
 }
 
 fn main() {
+    // jeu installé : assets/ est à côté de l'exécutable, on s'y place (le double-clic lance le
+    // jeu depuis n'importe quel dossier). En dev on reste à la racine du repo
+    if let Some(dir) = updater::install_dir() {
+        let _ = std::env::set_current_dir(dir);
+    }
+    // nouvelle release sur GitHub ? Téléchargée et installée en arrière-plan
+    let update_status = updater::start();
+
     // init window
     let (mut rl, thread) = raylib::init()
         .size(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -119,6 +132,15 @@ fn main() {
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
         let delta_time = rl.get_frame_time();
+        // mise à jour en arrière-plan : son avancement s'affiche sur l'écran titre
+        if let Some(status) = update_status.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            game.update_notice = Some(match status {
+                UpdateStatus::Downloading(version) => format!("Downloading update v{version}..."),
+                UpdateStatus::Installed(version) => {
+                    format!("Update v{version} installed: restart the game to play it")
+                }
+            });
+        }
         // temps accéléré pour la grille seulement (bouton x2), le combat garde le vrai temps
         let grid_dt = if game.game_mode == game_mode::GameMode::GridScreen {
             delta_time * game.grid_speed
@@ -492,7 +514,14 @@ fn main() {
         let mut d = rl.begin_drawing(&thread);
 
         if game.game_mode == game_mode::GameMode::TitleScreen {
-            render::draw_title_screen(&mut d, &assets, &hud, mouse_position, game.title_notice);
+            render::draw_title_screen(
+                &mut d,
+                &assets,
+                &hud,
+                mouse_position,
+                game.title_notice,
+                game.update_notice.as_deref(),
+            );
         } else if game.game_mode == game_mode::GameMode::FactionSelectionScreen {
             render::draw_faction_selection_screen(&mut d, &mut assets, delta_time, mouse_position);
         } else if game.game_mode == game_mode::GameMode::PauseScreen {

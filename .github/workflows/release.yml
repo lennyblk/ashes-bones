@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux deps (raylib)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libasound2-dev libx11-dev libxrandr-dev \
+            libxi-dev libxcursor-dev libxinerama-dev libgl1-mesa-dev libwayland-dev libxkbcommon-dev
+      - run: cargo build --release
+      # zip = l'exécutable + assets/ à la racine : c'est ce que le jeu installé et la mise à
+      # jour automatique attendent
+      - name: Package
+        shell: bash
+        run: |
+          mkdir package
+          cp target/release/ashes-bones${{ runner.os == 'Windows' && '.exe' || '' }} package/
+          cp -r assets package/
+          cd package
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a ../ashes-bones-${{ matrix.target }}.zip .
+          else
+            zip -r ../ashes-bones-${{ matrix.target }}.zip .
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ashes-bones-${{ matrix.target }}.zip

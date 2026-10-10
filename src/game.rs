@@ -65,6 +65,8 @@ pub struct Game {
 
     // message affiché sur l'écran titre (ex : adversaire déconnecté), effacé au prochain clic
     pub title_notice: Option<&'static str>,
+    // avancement de la mise à jour automatique, affiché en bas de l'écran titre
+    pub update_notice: Option<String>,
 }
 
 /// online : revanche en fin de partie. Elle démarre quand les deux ont cliqué Retry
@@ -118,6 +120,7 @@ impl Game {
             duel_exchange: DuelExchange::default(),
 
             title_notice: None,
+            update_notice: None,
             rematch: Rematch::default(),
         }
     }
