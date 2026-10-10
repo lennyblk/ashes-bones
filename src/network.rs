@@ -8,7 +8,7 @@
 //!   RETRY           revanche demandée en fin de partie
 //!
 //!   découverte en LAN (UDP broadcast, port 6667), annoncée par l'hôte toutes les secondes :
-//!   ASHES|human|open|nom de la partie|nom de l'hôte      (open / full)
+//!   ASHES|0.1.0|human|open|nom de la partie|nom de l'hôte      (version du jeu, open / full)
 
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
@@ -277,16 +277,29 @@ fn decode_command(words: &[&str]) -> Option<Command> {
 // découverte des parties en LAN -----------------------------------------------
 
 pub const DISCOVERY_PORT: u16 = 6667;
+/// version du jeu (Cargo.toml) : deux versions différentes ne jouent pas ensemble
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
 const FORGET_AFTER: Duration = Duration::from_secs(3);
 
 /// ce qu'un hôte annonce sur le réseau local
 #[derive(Clone)]
 pub struct GameInfo {
+    pub version: String,
     pub name: String,
     pub host_name: String,
     pub host_faction: Faction,
     pub full: bool,
+}
+
+impl GameInfo {
+    pub fn is_compatible(&self) -> bool {
+        self.version == VERSION
+    }
+
+    pub fn is_joinable(&self) -> bool {
+        !self.full && self.is_compatible()
+    }
 }
 
 /// hôte : annonce sa partie toutes les secondes à tout le réseau local (broadcast UDP).
@@ -309,16 +322,17 @@ impl Announcer {
         })
     }
 
-    /// à appeler à chaque frame : envoie l'annonce si la dernière date d'au moins 1 s
-    pub fn tick(&mut self) {
+    /// à appeler à chaque frame : envoie l'annonce si la dernière date d'au moins 1 s.
+    /// Erreur = réseau local injoignable (ex : macOS sans l'autorisation Réseau local)
+    pub fn tick(&mut self) -> io::Result<()> {
         if self.last_sent.is_some_and(|t| t.elapsed() < ANNOUNCE_EVERY) {
-            return;
+            return Ok(());
         }
-        let text = encode_info(&self.info);
-        let _ = self
-            .socket
-            .send_to(text.as_bytes(), ("255.255.255.255", DISCOVERY_PORT));
         self.last_sent = Some(Instant::now());
+        let text = encode_info(&self.info);
+        self.socket
+            .send_to(text.as_bytes(), ("255.255.255.255", DISCOVERY_PORT))?;
+        Ok(())
     }
 }
 
@@ -383,7 +397,8 @@ impl Browser {
 fn encode_info(info: &GameInfo) -> String {
     let state = if info.full { "full" } else { "open" };
     format!(
-        "ASHES|{}|{state}|{}|{}",
+        "ASHES|{}|{}|{state}|{}|{}",
+        info.version,
         faction_name(info.host_faction),
         info.name,
         info.host_name
@@ -392,10 +407,11 @@ fn encode_info(info: &GameInfo) -> String {
 
 fn decode_info(text: &str) -> Option<GameInfo> {
     let parts: Vec<&str> = text.split('|').collect();
-    let ["ASHES", faction, state, name, host_name] = parts.as_slice() else {
+    let ["ASHES", version, faction, state, name, host_name] = parts.as_slice() else {
         return None;
     };
     Some(GameInfo {
+        version: version.to_string(),
         name: name.to_string(),
         host_name: host_name.to_string(),
         host_faction: parse_faction(faction)?,

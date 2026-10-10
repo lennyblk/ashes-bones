@@ -642,7 +642,7 @@ pub fn draw_multiplayer_screen(
 
     // lignes, ou un message quand il n'y a rien à lister
     let message = match browser {
-        None => Some("Another window is already browsing games on this PC"),
+        None => Some("Port 6667 is already in use on this PC"),
         Some(browser) if browser.games().is_empty() => {
             Some("Searching for games on your network...")
         }
@@ -677,9 +677,9 @@ pub fn draw_multiplayer_screen(
         if is_selected {
             d.draw_rectangle_lines_ex(row, 2.0, LOBBY_GOLD);
         }
-        // partie pleine : toute la ligne est grisée
+        // partie pleine ou d'une autre version : toute la ligne est grisée
         let dim = |c: Color| {
-            if lan_game.info.full {
+            if !lan_game.info.is_joinable() {
                 Color::new(c.r, c.g, c.b, 110)
             } else {
                 c
@@ -723,14 +723,17 @@ pub fn draw_multiplayer_screen(
             1.0,
             dim(faction_color),
         );
-        let (players, players_color) = if info.full {
-            ("FULL", LOBBY_UNDEAD)
+        // autre version : on l'affiche à la place des joueurs, c'est ce qui bloque
+        let (players, players_color) = if !info.is_compatible() {
+            (format!("v{}", info.version), LOBBY_UNDEAD)
+        } else if info.full {
+            (String::from("FULL"), LOBBY_UNDEAD)
         } else {
-            ("1/2", LOBBY_OPEN)
+            (String::from("1/2"), LOBBY_OPEN)
         };
         d.draw_text_ex(
             font,
-            players,
+            &players,
             cell(LOBBY_COLUMNS[3].1),
             20.0,
             1.0,

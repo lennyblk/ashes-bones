@@ -216,6 +216,7 @@ fn main() {
             Some(HostAction::Open) => {
                 let form = &game.host_form;
                 let info = GameInfo {
+                    version: network::VERSION.to_string(),
                     name: form.game_name.trim().to_string(),
                     host_name: form.player_name.trim().to_string(),
                     host_faction: form.faction,
@@ -390,7 +391,13 @@ fn main() {
             announcer = None;
         }
         if let Some(announcer) = &mut announcer {
-            announcer.tick();
+            // invisible sur le réseau = personne ne pourra rejoindre : inutile d'attendre
+            if announcer.tick().is_err() && host_listener.is_some() {
+                host_listener = None;
+                game.host_form.error = Some(
+                    "Can't reach the local network (macOS: allow Local Network, then restart)",
+                );
+            }
         }
         if connection.is_some() && game.game_mode == GameMode::TitleScreen {
             // pas d'écrasement de « Your opponent disconnected » quand c'est lui qui est parti

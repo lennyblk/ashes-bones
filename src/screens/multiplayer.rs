@@ -67,18 +67,20 @@ pub fn update(
         browser.clear();
         game.lobby_selected = None;
     }
-    // clic sur une partie ouverte : elle devient la sélection (une FULL ne se rejoint pas)
+    // clic sur une partie ouverte : elle devient la sélection (FULL ou autre version : non)
     for (i, lan_game) in browser.games().iter().take(MAX_ROWS).enumerate() {
-        if !lan_game.info.full && input::is_button_clicked(mouse_position, clicked, row_rect(i)) {
+        if lan_game.info.is_joinable()
+            && input::is_button_clicked(mouse_position, clicked, row_rect(i))
+        {
             game.lobby_selected = Some(lan_game.address);
         }
     }
-    // la partie choisie a disparu ou est passée FULL : on l'oublie
+    // la partie choisie a disparu ou n'est plus rejoignable : on l'oublie
     if let Some(ip) = game.lobby_selected {
         if !browser
             .games()
             .iter()
-            .any(|g| g.address == ip && !g.info.full)
+            .any(|g| g.address == ip && g.info.is_joinable())
         {
             game.lobby_selected = None;
         }
