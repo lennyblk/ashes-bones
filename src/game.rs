@@ -5,6 +5,7 @@ use raylib::prelude::*;
 use crate::duel::DuelConditions;
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::minigame::{DuelExchange, MiniGame, ResultDisplay};
+use crate::screens::host::HostForm;
 use crate::unit::{Faction, Unit, UnitClass, UnitState};
 use crate::{GRID_COLS, GRID_ROWS, TILE_SIZE};
 
@@ -26,6 +27,8 @@ pub struct Game {
     pub guide_dragging: bool,
     // écran Multiplayer : IP de la partie sélectionnée dans la liste
     pub lobby_selected: Option<IpAddr>,
+    // écran Host game : gardé d'une partie à l'autre (pas remis à zéro par reset)
+    pub host_form: HostForm,
 
     pub current_turn: TurnPhase,
     // vitesse de la grille (x1 / x2) : marche, animations, enchaînement des ennemis.
@@ -88,6 +91,7 @@ impl Game {
             guide_scroll: 0.0,
             guide_dragging: false,
             lobby_selected: None,
+            host_form: HostForm::new(),
 
             current_turn: TurnPhase::PlayerTurn,
             grid_speed: 1.0,

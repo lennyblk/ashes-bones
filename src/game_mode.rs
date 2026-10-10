@@ -7,6 +7,7 @@ pub enum GameMode {
     PauseScreen,
     GuideScreen,
     MultiplayerScreen,
+    HostScreen,
     Victory,
     Defeat,
 }

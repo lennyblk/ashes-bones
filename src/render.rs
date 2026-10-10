@@ -9,6 +9,7 @@ use crate::grid::DuelPreview;
 use crate::map::TileMap;
 use crate::minigame::{MiniGame, ResultDisplay, TimingResult};
 use crate::network::Browser;
+use crate::screens::host::{self, HostField, HostForm};
 use crate::screens::multiplayer;
 use crate::screens::{guide, winfo};
 use crate::ui::{self, HudRects};
@@ -589,10 +590,12 @@ pub fn draw_multiplayer_screen(
     d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
     let left = panel.x + 24.0;
     let right = panel.x + panel.width - 24.0;
-    let font = &assets.hud_font;
+    // comme le guide : titres et boutons en hud_font, tout le texte en info_font
+    let heading_font = &assets.hud_font;
+    let font = &assets.info_font;
 
     d.draw_text_ex(
-        font,
+        heading_font,
         "Open games",
         Vector2::new(left, 122.0),
         30.0,
@@ -615,7 +618,7 @@ pub fn draw_multiplayer_screen(
             1.0,
             LOBBY_MUTED,
         );
-        ui::draw_text_button(d, font, refresh, "Refresh");
+        ui::draw_text_button(d, heading_font, refresh, "Refresh");
     }
     d.draw_line_ex(
         Vector2::new(left, 172.0),
@@ -747,9 +750,172 @@ pub fn draw_multiplayer_screen(
         );
     }
 
-    ui::draw_text_button(d, font, hud.btn_mp_back, "Back");
-    draw_texture_in(d, &assets.btn_host, hud.btn_mp_host);
-    draw_texture_in(d, &assets.btn_join, hud.btn_mp_join);
+    ui::draw_text_button(d, heading_font, hud.btn_mp_back, "Back");
+    draw_texture_in(d, &assets.btn_host, hud.btn_mp_host, Color::WHITE);
+    draw_texture_in(d, &assets.btn_join, hud.btn_mp_join, Color::WHITE);
+
+    d.draw_texture_ex(
+        assets.cursor_texture(CursorType::Normal),
+        Vector2::new(mouse_position.x, mouse_position.y),
+        0.0,
+        0.7,
+        Color::WHITE,
+    );
+}
+
+// Host game screen ---------------------------------------------------------------
+
+pub fn draw_host_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &mut Assets,
+    delta_time: f32,
+    hud: &HudRects,
+    mouse_position: Vector2,
+    form: &HostForm,
+) {
+    draw_fullscreen_texture(d, &assets.menu_background_texture);
+
+    // titre entre deux persos idle (ni ceux du guide, ni ceux de la liste)
+    let title = "Host a game";
+    let title_size = 48.0;
+    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
+    let header_middle = host::PANEL.y / 2.0;
+    let title_pos = Vector2::new(
+        SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0,
+        header_middle - title_text_size.y / 2.0,
+    );
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos + Vector2::new(2.0, 2.0),
+        title_size,
+        1.0,
+        Color::new(0, 0, 0, 160),
+    );
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos,
+        title_size,
+        1.0,
+        Color::WHITE,
+    );
+    let sprite_size = 190.0;
+    let sprite_top = header_middle - sprite_size / 2.0 + 10.0;
+    let sprite_offset = title_text_size.x / 2.0 + 90.0;
+    draw_idle_card(
+        d,
+        &mut assets.mage.idle,
+        SCREEN_WIDTH as f32 / 2.0 - sprite_offset,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        &mut assets.banshee.idle,
+        SCREEN_WIDTH as f32 / 2.0 + sprite_offset,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+
+    let panel = host::PANEL;
+    d.draw_rectangle_rec(panel, Color::new(18, 26, 36, 230));
+    d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
+
+    // champs texte : le champ actif a une bordure dorée
+    for (field, label, text) in [
+        (HostField::GameName, "GAME NAME", &form.game_name),
+        (HostField::PlayerName, "YOUR NAME", &form.player_name),
+    ] {
+        let rect = host::field_rect(field);
+        let focused = form.focus == field;
+        d.draw_text_ex(
+            &assets.info_font,
+            label,
+            Vector2::new(rect.x, rect.y - 26.0),
+            18.0,
+            1.0,
+            LOBBY_MUTED,
+        );
+        d.draw_rectangle_rec(rect, Color::new(10, 14, 20, 230));
+        d.draw_rectangle_lines_ex(rect, 2.0, if focused { LOBBY_GOLD } else { LOBBY_MUTED });
+        d.draw_text_ex(
+            &assets.info_font,
+            text,
+            Vector2::new(rect.x + 14.0, rect.y + rect.height / 2.0 - 12.0),
+            24.0,
+            1.0,
+            Color::WHITE,
+        );
+    }
+
+    // choix de faction : carte avec le perso idle, la faction choisie en doré
+    d.draw_text_ex(
+        &assets.info_font,
+        "YOUR FACTION",
+        Vector2::new(
+            host::faction_rect(Faction::Human).x,
+            host::faction_rect(Faction::Human).y - 26.0,
+        ),
+        18.0,
+        1.0,
+        LOBBY_MUTED,
+    );
+    for (faction, name, color) in [
+        (Faction::Human, "Human", LOBBY_HUMAN),
+        (Faction::Undead, "Undead", LOBBY_UNDEAD),
+    ] {
+        let rect = host::faction_rect(faction);
+        let chosen = form.faction == faction;
+        d.draw_rectangle_rec(
+            rect,
+            if chosen {
+                Color::new(70, 60, 30, 220)
+            } else {
+                Color::new(26, 34, 44, 220)
+            },
+        );
+        d.draw_rectangle_lines_ex(
+            rect,
+            if chosen { 3.0 } else { 1.0 },
+            if chosen { LOBBY_GOLD } else { LOBBY_MUTED },
+        );
+        let animation = match faction {
+            Faction::Human => &mut assets.soldier.idle,
+            Faction::Undead => &mut assets.skeleton.idle,
+        };
+        draw_idle_card(
+            d,
+            animation,
+            rect.x + rect.width / 2.0,
+            rect.y - 10.0,
+            150.0,
+            delta_time,
+        );
+        let size = assets.info_font.measure_text(name, 26.0, 1.0);
+        d.draw_text_ex(
+            &assets.info_font,
+            name,
+            Vector2::new(
+                rect.x + rect.width / 2.0 - size.x / 2.0,
+                rect.y + rect.height - size.y - 14.0,
+            ),
+            26.0,
+            1.0,
+            color,
+        );
+    }
+
+    ui::draw_text_button(d, &assets.hud_font, hud.btn_mp_back, "Back");
+    // grisé tant qu'un nom manque
+    let host_tint = if form.is_complete() {
+        Color::WHITE
+    } else {
+        Color::new(110, 110, 110, 200)
+    };
+    draw_texture_in(d, &assets.btn_host, hud.btn_mp_join, host_tint);
 
     d.draw_texture_ex(
         assets.cursor_texture(CursorType::Normal),
@@ -773,14 +939,14 @@ fn fit_text(font: &Font, text: &str, size: f32, max_width: f32) -> String {
 }
 
 /// texture étirée pour remplir `rect` (ex : bouton dessiné plus petit que son image)
-fn draw_texture_in(d: &mut RaylibDrawHandle, texture: &Texture2D, rect: Rectangle) {
+fn draw_texture_in(d: &mut RaylibDrawHandle, texture: &Texture2D, rect: Rectangle, tint: Color) {
     d.draw_texture_pro(
         texture,
         Rectangle::new(0.0, 0.0, texture.width as f32, texture.height as f32),
         rect,
         Vector2::new(0.0, 0.0),
         0.0,
-        Color::WHITE,
+        tint,
     );
 }
 

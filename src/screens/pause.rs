@@ -16,6 +16,7 @@ pub fn handle_escape(game: &mut Game, rl: &RaylibHandle) {
         }
         GameMode::PauseScreen => game.game_mode = game.paused_from,
         GameMode::GuideScreen => game.game_mode = game.guide_return_to,
+        GameMode::HostScreen => game.game_mode = GameMode::MultiplayerScreen,
         GameMode::MultiplayerScreen => {
             game.game_mode = GameMode::TitleScreen;
             game.lobby_selected = None;

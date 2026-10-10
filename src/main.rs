@@ -248,6 +248,9 @@ fn main() {
             browser.as_mut(),
             click_consumed,
         );
+        // après multiplayer : son Back et celui de l'écran Host sont au même endroit, le clic
+        // qui revient à la liste ne doit pas aussi la quitter dans la même frame
+        screens::host::update(&mut game, &mut rl, &hud, mouse_position, click_consumed);
         if screens::pause::update(&mut game, &rl, &hud, mouse_position) {
             break;
         }
@@ -468,6 +471,15 @@ fn main() {
             render::draw_faction_selection_screen(&mut d, &mut assets, delta_time, mouse_position);
         } else if game.game_mode == game_mode::GameMode::PauseScreen {
             render::draw_pause_screen(&mut d, &assets, &hud, mouse_position);
+        } else if game.game_mode == GameMode::HostScreen {
+            render::draw_host_screen(
+                &mut d,
+                &mut assets,
+                delta_time,
+                &hud,
+                mouse_position,
+                &game.host_form,
+            );
         } else if game.game_mode == GameMode::MultiplayerScreen {
             render::draw_multiplayer_screen(
                 &mut d,

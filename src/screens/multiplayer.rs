@@ -68,5 +68,7 @@ pub fn update(
             game.lobby_selected = None;
         }
     }
-    // Host game -> écran de création (5c), Join game -> connexion à la partie choisie (5d)
+    if input::is_button_clicked(mouse_position, clicked, hud.btn_mp_host) {
+        game.game_mode = GameMode::HostScreen;
+    }
 }
