@@ -71,6 +71,8 @@ pub struct Assets {
     pub btn_multi_title_screen: Texture2D,
     pub btn_settings_title_screen: Texture2D,
     pub btn_guide_title_screen: Texture2D,
+    pub btn_host: Texture2D,
+    pub btn_join: Texture2D,
 }
 
 impl Assets {
@@ -654,6 +656,12 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         .unwrap();
     let btn_guide_title_screen = rl
         .load_texture(thread, "assets/menu-ui/btn_guide_normal.png")
+        .unwrap();
+    let btn_host = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_host_normal.png")
+        .unwrap();
+    let btn_join = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_join_normal.png")
         .unwrap();
     Assets {
         soldier: AnimationSet {
@@ -1693,5 +1701,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         btn_multi_title_screen,
         btn_settings_title_screen,
         btn_guide_title_screen,
+        btn_host,
+        btn_join,
     }
 }

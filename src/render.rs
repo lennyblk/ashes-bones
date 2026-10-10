@@ -1,14 +1,18 @@
 use crate::animation::Animation;
 use crate::assets::Assets;
+use std::net::IpAddr;
+
 use crate::cursor::CursorType;
 use crate::duel::{DuelConditions, DuelSide};
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::grid::DuelPreview;
 use crate::map::TileMap;
 use crate::minigame::{MiniGame, ResultDisplay, TimingResult};
+use crate::network::Browser;
+use crate::screens::multiplayer;
 use crate::screens::{guide, winfo};
 use crate::ui::{self, HudRects};
-use crate::unit::{Unit, UnitState};
+use crate::unit::{Faction, Unit, UnitState};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE};
 use raylib::prelude::*;
 
@@ -505,6 +509,304 @@ fn draw_fullscreen_texture(d: &mut RaylibDrawHandle, texture: &Texture2D) {
         Vector2::new(0.0, 0.0),
         0.0,
         Color::WHITE,
+    );
+}
+
+// Multiplayer screen --------------------------------------------------------------
+
+const LOBBY_GOLD: Color = Color::new(240, 196, 70, 255);
+const LOBBY_MUTED: Color = Color::new(150, 160, 170, 255);
+const LOBBY_HUMAN: Color = Color::new(120, 170, 255, 255);
+const LOBBY_UNDEAD: Color = Color::new(230, 100, 100, 255);
+const LOBBY_OPEN: Color = Color::new(120, 230, 120, 255);
+// décalage de chaque colonne depuis le bord gauche des lignes
+const LOBBY_COLUMNS: [(&str, f32); 4] = [
+    ("GAME", 0.0),
+    ("HOST", 380.0),
+    ("HOST FACTION", 620.0),
+    ("PLAYERS", 880.0),
+];
+
+pub fn draw_multiplayer_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &mut Assets,
+    delta_time: f32,
+    hud: &HudRects,
+    mouse_position: Vector2,
+    browser: Option<&Browser>,
+    selected: Option<IpAddr>,
+) {
+    draw_fullscreen_texture(d, &assets.menu_background_texture);
+
+    // titre entre deux persos idle (pas ceux du guide)
+    let title = "Multiplayer";
+    let title_size = 48.0;
+    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
+    let header_middle = multiplayer::PANEL.y / 2.0;
+    let title_pos = Vector2::new(
+        SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0,
+        header_middle - title_text_size.y / 2.0,
+    );
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos + Vector2::new(2.0, 2.0),
+        title_size,
+        1.0,
+        Color::new(0, 0, 0, 160),
+    );
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos,
+        title_size,
+        1.0,
+        Color::WHITE,
+    );
+    let sprite_size = 190.0;
+    let sprite_top = header_middle - sprite_size / 2.0 + 10.0;
+    let sprite_offset = title_text_size.x / 2.0 + 90.0;
+    draw_idle_card(
+        d,
+        &mut assets.soldier.idle,
+        SCREEN_WIDTH as f32 / 2.0 - sprite_offset,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        &mut assets.skeleton.idle,
+        SCREEN_WIDTH as f32 / 2.0 + sprite_offset,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+
+    // panneau de la liste
+    let panel = multiplayer::PANEL;
+    d.draw_rectangle_rec(panel, Color::new(18, 26, 36, 230));
+    d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
+    let left = panel.x + 24.0;
+    let right = panel.x + panel.width - 24.0;
+    let font = &assets.hud_font;
+
+    d.draw_text_ex(
+        font,
+        "Open games",
+        Vector2::new(left, 122.0),
+        30.0,
+        1.0,
+        LOBBY_GOLD,
+    );
+    if let Some(browser) = browser {
+        let count = browser.games().len();
+        let found = format!("{count} game{} found", if count == 1 { "" } else { "s" });
+        let size = font.measure_text(&found, 20.0, 1.0);
+        let refresh = hud.btn_mp_refresh;
+        d.draw_text_ex(
+            font,
+            &found,
+            Vector2::new(
+                refresh.x - 16.0 - size.x,
+                refresh.y + refresh.height / 2.0 - size.y / 2.0,
+            ),
+            20.0,
+            1.0,
+            LOBBY_MUTED,
+        );
+        ui::draw_text_button(d, font, refresh, "Refresh");
+    }
+    d.draw_line_ex(
+        Vector2::new(left, 172.0),
+        Vector2::new(right, 172.0),
+        2.0,
+        LOBBY_GOLD,
+    );
+    let columns_x = multiplayer::row_rect(0).x + 12.0;
+    for (label, offset) in LOBBY_COLUMNS {
+        d.draw_text_ex(
+            font,
+            label,
+            Vector2::new(columns_x + offset, 182.0),
+            16.0,
+            1.0,
+            LOBBY_MUTED,
+        );
+    }
+
+    // lignes, ou un message quand il n'y a rien à lister
+    let message = match browser {
+        None => Some("Another window is already browsing games on this PC"),
+        Some(browser) if browser.games().is_empty() => {
+            Some("Searching for games on your network...")
+        }
+        Some(_) => None,
+    };
+    if let Some(message) = message {
+        let size = font.measure_text(message, 24.0, 1.0);
+        d.draw_text_ex(
+            font,
+            message,
+            Vector2::new(
+                SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0,
+                panel.y + panel.height / 2.0,
+            ),
+            24.0,
+            1.0,
+            LOBBY_MUTED,
+        );
+    }
+    let games = browser.map_or(&[][..], |b| b.games());
+    for (i, lan_game) in games.iter().take(multiplayer::MAX_ROWS).enumerate() {
+        let row = multiplayer::row_rect(i);
+        let is_selected = selected == Some(lan_game.address);
+        let background = if is_selected {
+            Color::new(70, 60, 30, 220)
+        } else if i % 2 == 0 {
+            Color::new(32, 42, 54, 200)
+        } else {
+            Color::new(26, 34, 44, 200)
+        };
+        d.draw_rectangle_rec(row, background);
+        if is_selected {
+            d.draw_rectangle_lines_ex(row, 2.0, LOBBY_GOLD);
+        }
+        // partie pleine : toute la ligne est grisée
+        let dim = |c: Color| {
+            if lan_game.info.full {
+                Color::new(c.r, c.g, c.b, 110)
+            } else {
+                c
+            }
+        };
+        let text_y = row.y + row.height / 2.0 - 10.0;
+        let cell = |offset: f32| Vector2::new(columns_x + offset, text_y);
+        let info = &lan_game.info;
+        d.draw_text_ex(
+            font,
+            &fit_text(font, &info.name, 20.0, 360.0),
+            cell(LOBBY_COLUMNS[0].1),
+            20.0,
+            1.0,
+            dim(Color::WHITE),
+        );
+        d.draw_text_ex(
+            font,
+            &fit_text(font, &info.host_name, 20.0, 220.0),
+            cell(LOBBY_COLUMNS[1].1),
+            20.0,
+            1.0,
+            dim(Color::WHITE),
+        );
+        let (icon, faction_name, faction_color) = match info.host_faction {
+            Faction::Human => (&assets.soldier.idle, "Human", LOBBY_HUMAN),
+            Faction::Undead => (&assets.skeleton.idle, "Undead", LOBBY_UNDEAD),
+        };
+        let faction_x = columns_x + LOBBY_COLUMNS[2].1;
+        draw_animation_frame(
+            d,
+            icon,
+            Rectangle::new(faction_x - 8.0, row.y - 4.0, 54.0, 54.0),
+            dim(Color::WHITE),
+        );
+        d.draw_text_ex(
+            font,
+            faction_name,
+            Vector2::new(faction_x + 46.0, text_y),
+            20.0,
+            1.0,
+            dim(faction_color),
+        );
+        let (players, players_color) = if info.full {
+            ("FULL", LOBBY_UNDEAD)
+        } else {
+            ("1/2", LOBBY_OPEN)
+        };
+        d.draw_text_ex(
+            font,
+            players,
+            cell(LOBBY_COLUMNS[3].1),
+            20.0,
+            1.0,
+            dim(players_color),
+        );
+    }
+
+    if let Some(lan_game) = games.iter().find(|g| Some(g.address) == selected) {
+        let text = format!("Selected: {}", lan_game.info.name);
+        let text = fit_text(font, &text, 20.0, panel.width - 48.0);
+        let size = font.measure_text(&text, 20.0, 1.0);
+        d.draw_text_ex(
+            font,
+            &text,
+            Vector2::new(right - size.x, panel.y + panel.height - 24.0 - size.y),
+            20.0,
+            1.0,
+            Color::WHITE,
+        );
+    }
+
+    ui::draw_text_button(d, font, hud.btn_mp_back, "Back");
+    draw_texture_in(d, &assets.btn_host, hud.btn_mp_host);
+    draw_texture_in(d, &assets.btn_join, hud.btn_mp_join);
+
+    d.draw_texture_ex(
+        assets.cursor_texture(CursorType::Normal),
+        Vector2::new(mouse_position.x, mouse_position.y),
+        0.0,
+        0.7,
+        Color::WHITE,
+    );
+}
+
+/// coupe le texte avec "..." s'il dépasse `max_width`
+fn fit_text(font: &Font, text: &str, size: f32, max_width: f32) -> String {
+    if font.measure_text(text, size, 1.0).x <= max_width {
+        return text.to_string();
+    }
+    let mut cut: String = text.to_string();
+    while !cut.is_empty() && font.measure_text(&format!("{cut}..."), size, 1.0).x > max_width {
+        cut.pop();
+    }
+    format!("{cut}...")
+}
+
+/// texture étirée pour remplir `rect` (ex : bouton dessiné plus petit que son image)
+fn draw_texture_in(d: &mut RaylibDrawHandle, texture: &Texture2D, rect: Rectangle) {
+    d.draw_texture_pro(
+        texture,
+        Rectangle::new(0.0, 0.0, texture.width as f32, texture.height as f32),
+        rect,
+        Vector2::new(0.0, 0.0),
+        0.0,
+        Color::WHITE,
+    );
+}
+
+/// frame courante d'une animation dans `rect`, sans la faire avancer, ratio gardé
+fn draw_animation_frame(
+    d: &mut RaylibDrawHandle,
+    animation: &Animation,
+    rect: Rectangle,
+    tint: Color,
+) {
+    let frame = animation.animation_frame();
+    let scale = (rect.width / frame.width).min(rect.height / frame.height);
+    let width = frame.width * scale;
+    let height = frame.height * scale;
+    d.draw_texture_pro(
+        &animation.texture,
+        frame,
+        Rectangle::new(
+            rect.x + (rect.width - width) / 2.0,
+            rect.y + (rect.height - height) / 2.0,
+            width,
+            height,
+        ),
+        Vector2::new(0.0, 0.0),
+        0.0,
+        tint,
     );
 }
 

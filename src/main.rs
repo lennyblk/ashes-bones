@@ -28,7 +28,7 @@ use command::Command;
 use cursor::{CursorType, Cursors};
 use game::Game;
 use game_mode::{GameMode, TurnPhase};
-use network::{Connection, Event, Message};
+use network::{Browser, Connection, Event, Message};
 use unit::Faction;
 use unit::{Unit, UnitState};
 
@@ -194,6 +194,8 @@ fn main() {
     let mut connection: Option<Connection> = network.map(|(connection, _)| connection);
     // commandes reçues de l'adversaire, pas encore jouées
     let mut incoming: VecDeque<Command> = VecDeque::new();
+    // écran Multiplayer : écoute des parties annoncées sur le réseau local
+    let mut browser: Option<Browser> = None;
 
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
@@ -226,6 +228,26 @@ fn main() {
         if screens::title::update(&mut game, &rl, &hud, mouse_position, &mut click_consumed) {
             break;
         }
+        // l'écran Multiplayer écoute les annonces tant qu'il est affiché, et libère le port 6667
+        // en le quittant : un seul programme par PC peut l'écouter
+        if game.game_mode == GameMode::MultiplayerScreen {
+            if browser.is_none() {
+                browser = Browser::new().ok(); // port pris : None, on réessaie à la frame suivante
+            }
+            if let Some(browser) = &mut browser {
+                browser.update();
+            }
+        } else {
+            browser = None;
+        }
+        screens::multiplayer::update(
+            &mut game,
+            &rl,
+            &hud,
+            mouse_position,
+            browser.as_mut(),
+            click_consumed,
+        );
         if screens::pause::update(&mut game, &rl, &hud, mouse_position) {
             break;
         }
@@ -446,6 +468,16 @@ fn main() {
             render::draw_faction_selection_screen(&mut d, &mut assets, delta_time, mouse_position);
         } else if game.game_mode == game_mode::GameMode::PauseScreen {
             render::draw_pause_screen(&mut d, &assets, &hud, mouse_position);
+        } else if game.game_mode == GameMode::MultiplayerScreen {
+            render::draw_multiplayer_screen(
+                &mut d,
+                &mut assets,
+                delta_time,
+                &hud,
+                mouse_position,
+                browser.as_ref(),
+                game.lobby_selected,
+            );
         } else if game.game_mode == game_mode::GameMode::GuideScreen {
             render::draw_guide_screen(
                 &mut d,

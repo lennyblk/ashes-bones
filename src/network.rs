@@ -6,12 +6,15 @@
 //!   END
 //!   DUEL PERFECT    résultat de mon mini-jeu pour le duel en cours (GOOD / BAD)
 //!   RETRY           revanche demandée en fin de partie
+//!
+//!   découverte en LAN (UDP broadcast, port 6667), annoncée par l'hôte toutes les secondes :
+//!   ASHES|human|open|nom de la partie|nom de l'hôte      (open / full)
 
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
-use std::net::{Shutdown, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Shutdown, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::command::Command;
 use crate::minigame::TimingResult;
@@ -269,4 +272,137 @@ fn decode_command(words: &[&str]) -> Option<Command> {
         _ => return None,
     };
     Some(command)
+}
+
+// découverte des parties en LAN -----------------------------------------------
+
+pub const DISCOVERY_PORT: u16 = 6667;
+const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
+const FORGET_AFTER: Duration = Duration::from_secs(3);
+
+/// ce qu'un hôte annonce sur le réseau local
+#[derive(Clone)]
+pub struct GameInfo {
+    pub name: String,
+    pub host_name: String,
+    pub host_faction: Faction,
+    pub full: bool,
+}
+
+/// hôte : annonce sa partie toutes les secondes à tout le réseau local (broadcast UDP).
+/// Continue pendant la partie avec full = true, pour qu'elle s'affiche en FULL
+pub struct Announcer {
+    socket: UdpSocket,
+    pub info: GameInfo,
+    last_sent: Option<Instant>,
+}
+
+impl Announcer {
+    pub fn new(info: GameInfo) -> io::Result<Announcer> {
+        // port 0 : l'OS choisit un port libre pour envoyer, seul le port de destination compte
+        let socket = UdpSocket::bind(("0.0.0.0", 0))?;
+        socket.set_broadcast(true)?;
+        Ok(Announcer {
+            socket,
+            info,
+            last_sent: None,
+        })
+    }
+
+    /// à appeler à chaque frame : envoie l'annonce si la dernière date d'au moins 1 s
+    pub fn tick(&mut self) {
+        if self.last_sent.is_some_and(|t| t.elapsed() < ANNOUNCE_EVERY) {
+            return;
+        }
+        let text = encode_info(&self.info);
+        let _ = self
+            .socket
+            .send_to(text.as_bytes(), ("255.255.255.255", DISCOVERY_PORT));
+        self.last_sent = Some(Instant::now());
+    }
+}
+
+/// une partie vue sur le réseau local
+pub struct LanGame {
+    pub address: IpAddr,
+    pub info: GameInfo,
+    last_seen: Instant,
+}
+
+/// écran Multiplayer : écoute les annonces et tient la liste des parties du réseau local
+pub struct Browser {
+    socket: UdpSocket,
+    games: Vec<LanGame>,
+}
+
+impl Browser {
+    pub fn new() -> io::Result<Browser> {
+        let socket = UdpSocket::bind(("0.0.0.0", DISCOVERY_PORT))?;
+        socket.set_nonblocking(true)?;
+        Ok(Browser {
+            socket,
+            games: Vec::new(),
+        })
+    }
+
+    /// à appeler à chaque frame : lit les annonces arrivées, oublie les hôtes muets
+    pub fn update(&mut self) {
+        let mut buffer = [0u8; 512];
+        while let Ok((size, from)) = self.socket.recv_from(&mut buffer) {
+            let Some(info) = std::str::from_utf8(&buffer[..size])
+                .ok()
+                .and_then(decode_info)
+            else {
+                continue; // pas une annonce du jeu
+            };
+            match self.games.iter_mut().find(|g| g.address == from.ip()) {
+                Some(game) => {
+                    game.info = info;
+                    game.last_seen = Instant::now();
+                }
+                None => self.games.push(LanGame {
+                    address: from.ip(),
+                    info,
+                    last_seen: Instant::now(),
+                }),
+            }
+        }
+        self.games.retain(|g| g.last_seen.elapsed() < FORGET_AFTER);
+    }
+
+    pub fn games(&self) -> &[LanGame] {
+        &self.games
+    }
+
+    /// bouton Refresh : on vide, les hôtes encore là réapparaissent dans la seconde
+    pub fn clear(&mut self) {
+        self.games.clear();
+    }
+}
+
+fn encode_info(info: &GameInfo) -> String {
+    let state = if info.full { "full" } else { "open" };
+    format!(
+        "ASHES|{}|{state}|{}|{}",
+        faction_name(info.host_faction),
+        info.name,
+        info.host_name
+    )
+}
+
+fn decode_info(text: &str) -> Option<GameInfo> {
+    let parts: Vec<&str> = text.split('|').collect();
+    let ["ASHES", faction, state, name, host_name] = parts.as_slice() else {
+        return None;
+    };
+    Some(GameInfo {
+        name: name.to_string(),
+        host_name: host_name.to_string(),
+        host_faction: parse_faction(faction)?,
+        full: match *state {
+            "open" => false,
+            "full" => true,
+            _ => return None,
+        },
+    })
 }

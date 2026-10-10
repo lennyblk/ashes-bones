@@ -23,7 +23,8 @@ pub fn update(
         return true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_multi_title_screen) {
-        // TODO: mode multijoueur
+        game.game_mode = GameMode::MultiplayerScreen;
+        *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_settings_title_screen) {
         // TODO: écran settings

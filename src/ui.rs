@@ -22,6 +22,10 @@ pub struct HudRects {
     pub btn_pause_back: Rectangle,
     pub btn_pause_exit: Rectangle,
     pub btn_guide_back: Rectangle,
+    pub btn_mp_back: Rectangle,
+    pub btn_mp_refresh: Rectangle,
+    pub btn_mp_host: Rectangle,
+    pub btn_mp_join: Rectangle,
 }
 
 impl HudRects {
@@ -152,6 +156,34 @@ impl HudRects {
             height: pause_btn_height,
         };
 
+        // écran Multiplayer : Back à gauche, Host / Join à droite (textures affichées à
+        // moitié de leur taille), Refresh dans le coin haut droit du panneau
+        let mp_buttons_y = SCREEN_HEIGHT as f32 - 48.0 - 30.0;
+        let btn_mp_back = Rectangle {
+            x: 60.0,
+            y: mp_buttons_y,
+            width: pause_btn_width,
+            height: pause_btn_height,
+        };
+        let btn_mp_join = Rectangle {
+            x: SCREEN_WIDTH as f32 - 60.0 - 192.0,
+            y: mp_buttons_y,
+            width: 192.0,
+            height: 48.0,
+        };
+        let btn_mp_host = Rectangle {
+            x: btn_mp_join.x - 16.0 - 195.0,
+            y: mp_buttons_y,
+            width: 195.0,
+            height: 48.0,
+        };
+        let btn_mp_refresh = Rectangle {
+            x: SCREEN_WIDTH as f32 - 60.0 - 24.0 - 120.0,
+            y: 118.0,
+            width: 120.0,
+            height: 40.0,
+        };
+
         HudRects {
             btn_end_turn,
             btn_wait,
@@ -172,6 +204,10 @@ impl HudRects {
             btn_pause_back,
             btn_pause_exit,
             btn_guide_back,
+            btn_mp_back,
+            btn_mp_refresh,
+            btn_mp_host,
+            btn_mp_join,
         }
     }
 }

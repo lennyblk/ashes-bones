@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use raylib::prelude::*;
 
 use crate::duel::DuelConditions;
@@ -22,6 +24,8 @@ pub struct Game {
     // scroll du guide en pixels, et drag de sa scrollbar en cours
     pub guide_scroll: f32,
     pub guide_dragging: bool,
+    // écran Multiplayer : IP de la partie sélectionnée dans la liste
+    pub lobby_selected: Option<IpAddr>,
 
     pub current_turn: TurnPhase,
     // vitesse de la grille (x1 / x2) : marche, animations, enchaînement des ennemis.
@@ -83,6 +87,7 @@ impl Game {
             guide_return_to: GameMode::TitleScreen,
             guide_scroll: 0.0,
             guide_dragging: false,
+            lobby_selected: None,
 
             current_turn: TurnPhase::PlayerTurn,
             grid_speed: 1.0,
