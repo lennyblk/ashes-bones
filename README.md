@@ -63,10 +63,14 @@ Both players need the **same version** of the game. If the game doesn't show up 
 |---|---|
 | Select a unit, move, attack, heal | Left click |
 | Cancel an action | `B` |
-| Pause menu | `Esc` |
+| End turn | `Enter` |
+| Wait (selected unit) | `Space` |
 | Map speed x1 / x2 | `F` |
+| Pause menu | `Esc` |
 
-The in-game **Guide** (title screen) explains the duels and every minigame.
+Every key except `Esc` can be changed in **Settings**, along with the language (English / Français) and a few display options.
+
+The in-game **Guide** (title screen) explains the duels in three short pages, and every mini-game and positioning trick can be tried on the **Training ground**.
 
 ## Building from source
 

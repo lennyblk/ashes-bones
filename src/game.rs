@@ -5,7 +5,10 @@ use raylib::prelude::*;
 use crate::duel::DuelConditions;
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::minigame::{DuelExchange, MiniGame, ResultDisplay};
+use crate::screens::guide::GuidePage;
 use crate::screens::host::HostForm;
+use crate::screens::practice::Practice;
+use crate::settings::{self, Bind};
 use crate::unit::{Faction, Unit, UnitClass, UnitState};
 use crate::{GRID_COLS, GRID_ROWS, TILE_SIZE};
 
@@ -19,12 +22,15 @@ pub struct Game {
     pub inspected_enemy: Option<usize>,
 
     pub game_mode: GameMode,
-    // écran auquel revenir en quittant le menu pause / le guide
+    // écran auquel revenir en quittant le menu pause / le guide / les réglages
     pub paused_from: GameMode,
     pub guide_return_to: GameMode,
-    // scroll du guide en pixels, et drag de sa scrollbar en cours
-    pub guide_scroll: f32,
-    pub guide_dragging: bool,
+    pub settings_return_to: GameMode,
+    pub guide_page: GuidePage,
+    // réglages : action dont on attend la nouvelle touche
+    pub settings_capture: Option<Bind>,
+    // terrain d'entraînement, gardé tant que le jeu tourne
+    pub practice: Practice,
     // écran Multiplayer : IP de la partie sélectionnée dans la liste
     pub lobby_selected: Option<IpAddr>,
     // écran Multiplayer : échec de la connexion, affiché sous la liste
@@ -92,14 +98,16 @@ impl Game {
             game_mode: GameMode::TitleScreen,
             paused_from: GameMode::GridScreen,
             guide_return_to: GameMode::TitleScreen,
-            guide_scroll: 0.0,
-            guide_dragging: false,
+            settings_return_to: GameMode::TitleScreen,
+            guide_page: GuidePage::Basics,
+            settings_capture: None,
+            practice: Practice::new(),
             lobby_selected: None,
             lobby_error: None,
             host_form: HostForm::new(),
 
             current_turn: TurnPhase::PlayerTurn,
-            grid_speed: 1.0,
+            grid_speed: if settings::get().fast_map { 2.0 } else { 1.0 },
             enemy_turn_delay: 0.0,
             ai_turn_queue: Vec::new(),
             ai_acting_unit: None,
@@ -176,21 +184,32 @@ fn grid_to_screen_y(grid_y: i32) -> f32 {
     y
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_unit(
-    name: &str,
-    faction: Faction,
-    class: UnitClass,
-    move_points: i32,
-    hp: i32,
-    attack_range: i32,
-    attack_power: i32,
-    defense: i32,
-    can_heal: bool,
-) -> Unit {
+/// stats de chaque classe : déplacement, PV, portée, attaque, défense, soigne
+#[rustfmt::skip]
+fn stats(class: UnitClass) -> (i32, i32, i32, i32, i32, bool) {
+    match class {
+        // Human
+        UnitClass::Soldier =>     (2, 120, 1, 45, 10, false),
+        UnitClass::Cavalry =>     (4,  90, 1, 55,  7, false),
+        UnitClass::Assassin =>    (4,  65, 1, 85,  2, false),
+        UnitClass::Longbowman =>  (2,  75, 3, 50,  5, false),
+        UnitClass::Mage =>        (2,  55, 2, 80,  1, false),
+        UnitClass::Priest =>      (2,  95, 2, 35,  9, true),
+        // Undead
+        UnitClass::Wraith =>      (3,  90, 1, 50,  8, false),
+        UnitClass::BloodKnight => (4, 120, 1, 65, 14, false),
+        UnitClass::Banshee =>     (2,  60, 2, 78,  2, false),
+        UnitClass::Ghoul =>       (3,  85, 1, 60,  5, false),
+        UnitClass::Skeleton =>    (2,  80, 1, 50,  6, false),
+        UnitClass::Necromancer => (2,  60, 2, 75,  2, true),
+    }
+}
+
+/// une unité neuve de cette classe, pas encore placée
+pub fn new_unit(class: UnitClass) -> Unit {
+    let (move_points, hp, attack_range, attack_power, defense, can_heal) = stats(class);
     Unit {
-        name: String::from(name),
-        faction,
+        faction: class.faction(),
         class,
         grid_x: 0,
         grid_y: 0,
@@ -256,25 +275,13 @@ fn spawn_area(blocked_tiles: &[(i32, i32)], x_min: i32, x_max: i32) -> Vec<(i32,
 
 /// humains à gauche de la rivière (colonnes 11-12), undead à droite, placés au hasard.
 /// Appelée à chaque vrai début de partie (pas juste au lancement)
-#[rustfmt::skip]
 fn fresh_units(rl: &RaylibHandle, blocked_tiles: &[(i32, i32)]) -> Vec<Unit> {
-    let mut units: Vec<Unit> = vec![
-        // Human
-        spawn_unit("Soldier",     Faction::Human,  UnitClass::Soldier,     2, 120, 1, 45, 10, false),
-        spawn_unit("Cavalry",     Faction::Human,  UnitClass::Cavalry,     4,  90, 1, 55,  7, false),
-        spawn_unit("Assassin",    Faction::Human,  UnitClass::Assassin,    4,  65, 1, 85,  2, false),
-        spawn_unit("Longbowman",  Faction::Human,  UnitClass::Longbowman,  2,  75, 3, 50,  5, false),
-        spawn_unit("Mage",        Faction::Human,  UnitClass::Mage,        2,  55, 2, 80,  1, false),
-        spawn_unit("Priest",      Faction::Human,  UnitClass::Priest,      2,  95, 2, 35,  9, true),
-
-        // Undead
-        spawn_unit("Wraith",      Faction::Undead, UnitClass::Wraith,      3,  90, 1, 50,  8, false),
-        spawn_unit("Blood Knight",Faction::Undead, UnitClass::BloodKnight, 4, 120, 1, 65, 14, false),
-        spawn_unit("Banshee",     Faction::Undead, UnitClass::Banshee,     2,  60, 2, 78,  2, false),
-        spawn_unit("Ghoul",       Faction::Undead, UnitClass::Ghoul,       3,  85, 1, 60,  5, false),
-        spawn_unit("Skeleton",    Faction::Undead, UnitClass::Skeleton,    2,  80, 1, 50,  6, false),
-        spawn_unit("Necromancer", Faction::Undead, UnitClass::Necromancer, 2,  60, 2, 75,  2, true),
-    ];
+    // l'ordre compte : en ligne, l'hôte envoie la case de chaque unité dans cet ordre
+    let mut units: Vec<Unit> = UnitClass::HUMANS
+        .into_iter()
+        .chain(UnitClass::UNDEAD)
+        .map(new_unit)
+        .collect();
 
     let river_x = 11;
     let mut human_tiles = spawn_area(blocked_tiles, 0, river_x - 1);

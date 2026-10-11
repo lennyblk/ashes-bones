@@ -48,7 +48,7 @@ impl TimingBar {
             self.speed = -self.speed;
         }
 
-        if !rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+        if !crate::input::duel_action_pressed(rl) {
             return None;
         }
         let in_zone =

@@ -1,4 +1,5 @@
 use crate::command::Command;
+use crate::settings::{self, Bind};
 use crate::unit::{PendingAction, Unit, UnitState};
 use raylib::consts::KeyboardKey::*;
 use raylib::consts::MouseButton::*;
@@ -93,11 +94,24 @@ pub fn mouse_is_clicked(rl: &RaylibHandle) -> bool {
 }
 
 pub fn speed_toggle_pressed(rl: &RaylibHandle) -> bool {
-    rl.is_key_pressed(KEY_F)
+    settings::pressed(rl, Bind::MapSpeed)
 }
 
 pub fn cancel_pressed(rl: &RaylibHandle) -> bool {
-    rl.is_key_pressed(KEY_B)
+    settings::pressed(rl, Bind::Cancel)
+}
+
+pub fn end_turn_pressed(rl: &RaylibHandle) -> bool {
+    settings::pressed(rl, Bind::EndTurn)
+}
+
+pub fn wait_pressed(rl: &RaylibHandle) -> bool {
+    settings::pressed(rl, Bind::Wait)
+}
+
+/// mini-jeux « au bon moment » (barre, charge, pouls, tir) : clic gauche ou touche d'action
+pub fn duel_action_pressed(rl: &RaylibHandle) -> bool {
+    rl.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) || settings::pressed(rl, Bind::Action)
 }
 
 pub fn pause_pressed(rl: &RaylibHandle) -> bool {

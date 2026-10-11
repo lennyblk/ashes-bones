@@ -1,5 +1,7 @@
 use crate::combat::attack_damage_dealt;
 use crate::minigame::TimingResult;
+use crate::settings::tr;
+use crate::trf;
 use crate::unit::Unit;
 
 pub const BASE_WINDOW: f32 = 0.2;
@@ -26,7 +28,7 @@ pub struct DuelSide {
 }
 
 impl DuelSide {
-    fn base() -> DuelSide {
+    pub fn base() -> DuelSide {
         DuelSide {
             window: BASE_WINDOW,
             precision: BASE_PRECISION,
@@ -90,11 +92,97 @@ impl Odds {
     }
 }
 
+/// ce qui change le duel, selon le placement sur la grille
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FactorKind {
+    /// alliés de l'attaquant collés à la cible
+    Flank(u8),
+    /// un allié pile de l'autre côté de la cible
+    Pincer,
+    /// alliés collés à l'attaquant
+    Support(u8),
+    /// alliés de la cible collés à elle
+    Guarded(u8),
+    AimedShot,
+    PointBlank,
+    /// la cible est un tireur attaqué au contact
+    CaughtInMelee,
+    AttackerDesperate,
+    TargetDesperate,
+}
+
 /// une raison qui change le duel, affichée au joueur (preview sur la grille + écran de combat)
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Factor {
-    pub label: String,
+    pub kind: FactorKind,
     pub favors_attacker: bool,
+}
+
+impl Factor {
+    fn new(kind: FactorKind, favors_attacker: bool) -> Factor {
+        Factor {
+            kind,
+            favors_attacker,
+        }
+    }
+
+    /// nom court, ex : « Flank x2 ». `me_attacker` : le joueur est-il l'attaquant
+    pub fn label(&self, me_attacker: bool) -> String {
+        match self.kind {
+            FactorKind::Flank(n) => trf!("Flank x{}", n ; "Encerclement x{}", n),
+            FactorKind::Pincer => tr("Pincer", "Prise en tenaille").to_string(),
+            FactorKind::Support(n) => trf!("Support x{}", n ; "Soutien x{}", n),
+            FactorKind::Guarded(n) => trf!("Guarded x{}", n ; "Protégé x{}", n),
+            FactorKind::AimedShot => tr("Aimed shot", "Tir posé").to_string(),
+            FactorKind::PointBlank => tr("Point blank", "Tir à bout portant").to_string(),
+            FactorKind::CaughtInMelee => tr("Shooter in melee", "Tireur au contact").to_string(),
+            FactorKind::AttackerDesperate if me_attacker => {
+                tr("You're desperate", "Tu es aux abois").to_string()
+            }
+            FactorKind::AttackerDesperate => {
+                tr("Attacker desperate", "Attaquant aux abois").to_string()
+            }
+            FactorKind::TargetDesperate if me_attacker => {
+                tr("Target desperate", "Cible aux abois").to_string()
+            }
+            FactorKind::TargetDesperate => tr("You're desperate", "Tu es aux abois").to_string(),
+        }
+    }
+
+    /// ce que ça change, vu de l'attaquant : « +8% zone, -8% la sienne »
+    pub fn effect(&self) -> String {
+        match self.kind {
+            FactorKind::Flank(n) => {
+                let p = pct(FLANK_WINDOW * n as f32);
+                trf!("your zone +{}%, theirs -{}%", p, p ; "ta zone +{}%, la sienne -{}%", p, p)
+            }
+            FactorKind::Pincer => {
+                let p = pct(PRECISION_BONUS);
+                trf!("green +{}%, no PERFECT parry", p ; "vert +{}%, pas de parade PARFAITE", p)
+            }
+            FactorKind::Support(n) => trf!("+{} lives", n ; "+{} vies", n),
+            FactorKind::Guarded(n) => {
+                let p = pct(GUARD_WINDOW * n as f32);
+                trf!("your zone -{}%, they get +{} lives", p, n ; "ta zone -{}%, +{} vies pour lui", p, n)
+            }
+            FactorKind::AimedShot => {
+                let p = pct(1.0 - AIMED_TEMPO);
+                trf!("cursor {}% slower", p ; "curseur {}% plus lent", p)
+            }
+            FactorKind::PointBlank => {
+                let p = pct(SHOOTER_IN_MELEE_WINDOW);
+                trf!("your zone -{}%", p ; "ta zone -{}%", p)
+            }
+            FactorKind::CaughtInMelee => {
+                let (w, t) = (pct(SHOOTER_IN_MELEE_WINDOW), pct(MELEE_PANIC_TEMPO - 1.0));
+                trf!("their zone -{}%, {}% faster", w, t ; "sa zone -{}%, {}% plus rapide", w, t)
+            }
+            FactorKind::AttackerDesperate | FactorKind::TargetDesperate => {
+                let p = pct(PRECISION_BONUS);
+                trf!("green +{}%", p ; "vert +{}%", p)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -179,15 +267,7 @@ pub fn compute(
     if flankers > 0.0 {
         att.window += FLANK_WINDOW * flankers;
         def.window -= FLANK_WINDOW * flankers;
-        factors.push(Factor {
-            label: format!(
-                "Flank x{}: window +{}% / their window -{}%",
-                flankers as i32,
-                pct(FLANK_WINDOW * flankers),
-                pct(FLANK_WINDOW * flankers)
-            ),
-            favors_attacker: true,
-        });
+        factors.push(Factor::new(FactorKind::Flank(flankers as u8), true));
     }
 
     // revers : un allié pile de l'autre côté du défenseur, en mêlée
@@ -196,13 +276,7 @@ pub fn compute(
         if others(attacker.faction).any(|(_, u)| (u.grid_x, u.grid_y) == mirror) {
             att.precision += PRECISION_BONUS;
             def.precision = 0.0;
-            factors.push(Factor {
-                label: format!(
-                    "Pincer: precision +{}% / no perfect parry",
-                    pct(PRECISION_BONUS)
-                ),
-                favors_attacker: true,
-            });
+            factors.push(Factor::new(FactorKind::Pincer, true));
         }
     }
 
@@ -213,10 +287,7 @@ pub fn compute(
         .min(MAX_LIVES as usize) as u8;
     if supporters > 0 {
         att.lives += supporters;
-        factors.push(Factor {
-            label: format!("Support x{}: +{} lives", supporters, supporters),
-            favors_attacker: true,
-        });
+        factors.push(Factor::new(FactorKind::Support(supporters), true));
     }
 
     // garde : alliés du défenseur collés à lui
@@ -227,63 +298,33 @@ pub fn compute(
     if guards > 0 {
         att.window -= GUARD_WINDOW * guards as f32;
         def.lives += guards;
-        factors.push(Factor {
-            label: format!(
-                "Guarded x{}: window -{}% / they get +{} lives",
-                guards,
-                pct(GUARD_WINDOW * guards as f32),
-                guards
-            ),
-            favors_attacker: false,
-        });
+        factors.push(Factor::new(FactorKind::Guarded(guards), false));
     }
 
     // tireurs : à distance on vise posé, au contact c'est la panique
     if attacker.attack_range >= 2 {
         if dist >= 2 {
             att.tempo *= AIMED_TEMPO;
-            factors.push(Factor {
-                label: format!("Aimed shot: tempo -{}%", pct(1.0 - AIMED_TEMPO)),
-                favors_attacker: true,
-            });
+            factors.push(Factor::new(FactorKind::AimedShot, true));
         } else {
             att.window -= SHOOTER_IN_MELEE_WINDOW;
-            factors.push(Factor {
-                label: format!("Point blank: window -{}%", pct(SHOOTER_IN_MELEE_WINDOW)),
-                favors_attacker: false,
-            });
+            factors.push(Factor::new(FactorKind::PointBlank, false));
         }
     }
     if defender.attack_range >= 2 && dist == 1 {
         def.window -= SHOOTER_IN_MELEE_WINDOW;
         def.tempo *= MELEE_PANIC_TEMPO;
-        factors.push(Factor {
-            label: format!(
-                "Caught in melee: their window -{}%, tempo +{}%",
-                pct(SHOOTER_IN_MELEE_WINDOW),
-                pct(MELEE_PANIC_TEMPO - 1.0)
-            ),
-            favors_attacker: true,
-        });
+        factors.push(Factor::new(FactorKind::CaughtInMelee, true));
     }
 
     // désespoir : sous 30% PV, la fenêtre parfaite s'élargit (comeback)
     if is_desperate(attacker) {
         att.precision += PRECISION_BONUS;
-        factors.push(Factor {
-            label: format!("Desperate: precision +{}%", pct(PRECISION_BONUS)),
-            favors_attacker: true,
-        });
+        factors.push(Factor::new(FactorKind::AttackerDesperate, true));
     }
     if is_desperate(defender) && def.precision > 0.0 {
         def.precision += PRECISION_BONUS;
-        factors.push(Factor {
-            label: format!(
-                "They're desperate: their precision +{}%",
-                pct(PRECISION_BONUS)
-            ),
-            favors_attacker: false,
-        });
+        factors.push(Factor::new(FactorKind::TargetDesperate, false));
     }
 
     DuelConditions {

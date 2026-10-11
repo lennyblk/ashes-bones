@@ -53,7 +53,7 @@ impl ChargeRing {
     pub fn update(&mut self, rl: &RaylibHandle, delta_time: f32) -> Option<Attempt> {
         self.radius -= self.speed * delta_time;
 
-        if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+        if crate::input::duel_action_pressed(rl) {
             let gap = (self.radius - TARGET_RADIUS).abs();
             // trop tôt : raté, mais l'anneau continue sa course
             return Some(if gap <= self.perfect_band {

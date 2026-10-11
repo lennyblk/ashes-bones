@@ -6,6 +6,8 @@ pub enum GameMode {
     FactionSelectionScreen,
     PauseScreen,
     GuideScreen,
+    SettingsScreen,
+    PracticeScreen,
     MultiplayerScreen,
     HostScreen,
     Victory,

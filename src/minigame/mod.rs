@@ -10,15 +10,15 @@ use crate::SCREEN_WIDTH;
 use crate::animation::Animation;
 use crate::assets::Assets;
 use crate::duel::{DuelConditions, DuelSide};
+use crate::settings::{self, Bind, tr};
+use crate::trf;
 use crate::unit::{Faction, PendingAction, Unit, UnitClass, UnitState};
 use raylib::prelude::*;
 
 use channel::Channel;
 use charge::ChargeRing;
 use heartbeat::Heartbeat;
-pub use runes::BASE_GOOD_TIME as RUNES_TIME;
 use runes::RuneMemory;
-pub use sequence::BASE_GOOD_TIME as SEQUENCE_TIME;
 use sequence::KeySequence;
 use target::TargetShot;
 use timing::TimingBar;
@@ -89,6 +89,75 @@ impl MiniGameKind {
             UnitClass::Assassin | UnitClass::Wraith => MiniGameKind::Sequence,
             UnitClass::Mage | UnitClass::Banshee => MiniGameKind::Runes,
             UnitClass::BloodKnight => MiniGameKind::Heartbeat,
+        }
+    }
+
+    pub const ALL: [MiniGameKind; 7] = [
+        MiniGameKind::Timing,
+        MiniGameKind::Charge,
+        MiniGameKind::Target,
+        MiniGameKind::Sequence,
+        MiniGameKind::Runes,
+        MiniGameKind::Heartbeat,
+        MiniGameKind::Channel,
+    ];
+
+    /// les classes qui jouent ce mini-jeu
+    pub fn classes(self) -> &'static [UnitClass] {
+        match self {
+            MiniGameKind::Timing => &[UnitClass::Soldier, UnitClass::Skeleton],
+            MiniGameKind::Target => &[UnitClass::Longbowman],
+            MiniGameKind::Charge => &[UnitClass::Cavalry, UnitClass::Ghoul],
+            MiniGameKind::Sequence => &[UnitClass::Assassin, UnitClass::Wraith],
+            MiniGameKind::Runes => &[UnitClass::Mage, UnitClass::Banshee],
+            MiniGameKind::Heartbeat => &[UnitClass::BloodKnight],
+            MiniGameKind::Channel => &[UnitClass::Priest, UnitClass::Necromancer],
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            MiniGameKind::Timing => tr("Strike", "Frappe"),
+            MiniGameKind::Target => tr("Aim", "Visée"),
+            MiniGameKind::Charge => tr("Charge", "Charge"),
+            MiniGameKind::Sequence => tr("Combo", "Combo"),
+            MiniGameKind::Runes => tr("Runes", "Runes"),
+            MiniGameKind::Heartbeat => tr("Blood pulse", "Pouls de sang"),
+            MiniGameKind::Channel => tr("Channel", "Canalisation"),
+        }
+    }
+
+    /// la règle en deux lignes courtes (guide et entraînement)
+    pub fn rule(self) -> [&'static str; 2] {
+        match self {
+            MiniGameKind::Timing => [
+                tr("Stop the cursor", "Arrête le curseur"),
+                tr("in the yellow zone.", "dans la zone jaune."),
+            ],
+            MiniGameKind::Target => [
+                tr("Shoot the moving", "Tire sur la cible"),
+                tr("target.", "qui bouge."),
+            ],
+            MiniGameKind::Charge => [
+                tr("Strike when the ring", "Frappe quand l'anneau"),
+                tr("crosses the yellow band.", "passe sur le jaune."),
+            ],
+            MiniGameKind::Sequence => [
+                tr("Type the 4 arrows", "Tape les 4 flèches"),
+                tr("in order, fast!", "dans l'ordre, vite !"),
+            ],
+            MiniGameKind::Runes => [
+                tr("Watch the runes,", "Regarde les runes,"),
+                tr("then repeat them.", "puis refais la suite."),
+            ],
+            MiniGameKind::Heartbeat => [
+                tr("Hit the 3 drops", "Frappe les 3 gouttes"),
+                tr("on the beat.", "en rythme."),
+            ],
+            MiniGameKind::Channel => [
+                tr("Keep your cursor", "Garde ton curseur"),
+                tr("in the drifting aura.", "dans l'aura qui dérive."),
+            ],
         }
     }
 }
@@ -197,6 +266,7 @@ impl MiniGame {
             }
             Mechanic::Runes(runes) => {
                 runes.draw(d);
+                runes.draw_key_hints(d, &assets.info_font);
                 runes.area()
             }
             Mechanic::Heartbeat(heart) => {
@@ -209,6 +279,65 @@ impl MiniGame {
             }
         };
         self.draw_lives(d, assets, area);
+        self.draw_hint(d, assets, area);
+    }
+
+    /// comment jouer, en une ligne au-dessus du mini-jeu (avec les touches choisies)
+    pub fn hint(&self) -> String {
+        let action = settings::key_name(settings::key(Bind::Action));
+        match &self.mechanic {
+            Mechanic::Timing(_) => {
+                trf!("Click or {} in the yellow zone", action ; "Clic ou {} dans la zone jaune", action)
+            }
+            Mechanic::Target(_) => {
+                trf!("Aim, then click or {}", action ; "Vise, puis clic ou {}", action)
+            }
+            Mechanic::Charge(_) => trf!(
+                "Click or {} when the ring hits yellow", action ;
+                "Clic ou {} quand l'anneau touche le jaune", action
+            ),
+            Mechanic::Sequence(_) => {
+                let keys: Vec<String> = [Bind::Up, Bind::Left, Bind::Down, Bind::Right]
+                    .iter()
+                    .map(|b| settings::key_name(settings::key(*b)))
+                    .collect();
+                let keys = keys.join(" ");
+                trf!("Arrows or {}, in order", keys ; "Flèches ou {}, dans l'ordre", keys)
+            }
+            Mechanic::Runes(_) => tr(
+                "Watch, then repeat (click or keys)",
+                "Regarde, puis refais (clic ou touches)",
+            )
+            .to_string(),
+            Mechanic::Heartbeat(_) => {
+                trf!("Click or {} on each drop", action ; "Clic ou {} sur chaque goutte", action)
+            }
+            Mechanic::Channel(_) => tr(
+                "Keep your cursor in the aura",
+                "Garde le curseur dans l'aura",
+            )
+            .to_string(),
+        }
+    }
+
+    fn draw_hint(&self, d: &mut RaylibDrawHandle, assets: &Assets, area: Rectangle) {
+        let text = self.hint();
+        let size = assets.info_font.measure_text(&text, 20.0, 1.0);
+        let pos = Vector2::new(SCREEN_WIDTH as f32 / 2.0 - size.x / 2.0, area.y - 78.0);
+        d.draw_rectangle_rounded(
+            Rectangle::new(pos.x - 12.0, pos.y - 5.0, size.x + 24.0, size.y + 10.0),
+            0.5,
+            8,
+            Color::new(10, 10, 14, 190),
+        );
+        d.draw_text_ex(
+            &assets.info_font,
+            &text,
+            pos,
+            20.0,
+            1.0,
+            Color::new(235, 228, 210, 255),
+        );
     }
 
     /// vies en carrés rouges à gauche de l'aire du mini-jeu, "SAVED!" au-dessus
@@ -224,7 +353,7 @@ impl MiniGame {
             );
         }
         if self.saved_timer > 0.0 {
-            let text = "SAVED!";
+            let text = tr("SAVED!", "SAUVÉ !");
             let size = assets.info_font.measure_text(text, 28.0, 1.0);
             d.draw_text_ex(
                 &assets.info_font,
