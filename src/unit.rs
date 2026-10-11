@@ -1,4 +1,5 @@
 use crate::TILE_SIZE;
+use crate::settings::tr;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum Faction {
@@ -29,6 +30,51 @@ pub enum UnitClass {
     Ghoul,
     Skeleton,
     Necromancer,
+}
+
+impl UnitClass {
+    pub const HUMANS: [UnitClass; 6] = [
+        UnitClass::Soldier,
+        UnitClass::Cavalry,
+        UnitClass::Assassin,
+        UnitClass::Longbowman,
+        UnitClass::Mage,
+        UnitClass::Priest,
+    ];
+    pub const UNDEAD: [UnitClass; 6] = [
+        UnitClass::Wraith,
+        UnitClass::BloodKnight,
+        UnitClass::Banshee,
+        UnitClass::Ghoul,
+        UnitClass::Skeleton,
+        UnitClass::Necromancer,
+    ];
+
+    /// nom affiché, dans la langue choisie
+    pub fn name(self) -> &'static str {
+        match self {
+            UnitClass::Soldier => tr("Soldier", "Soldat"),
+            UnitClass::Cavalry => tr("Cavalry", "Cavalier"),
+            UnitClass::Assassin => tr("Assassin", "Assassin"),
+            UnitClass::Longbowman => tr("Longbowman", "Archer"),
+            UnitClass::Mage => tr("Mage", "Mage"),
+            UnitClass::Priest => tr("Priest", "Prêtre"),
+            UnitClass::Wraith => tr("Wraith", "Spectre"),
+            UnitClass::Banshee => tr("Banshee", "Banshee"),
+            UnitClass::BloodKnight => tr("Blood Knight", "Chevalier sanglant"),
+            UnitClass::Ghoul => tr("Ghoul", "Goule"),
+            UnitClass::Skeleton => tr("Skeleton", "Squelette"),
+            UnitClass::Necromancer => tr("Necromancer", "Nécromancien"),
+        }
+    }
+
+    pub fn faction(self) -> Faction {
+        if UnitClass::HUMANS.contains(&self) {
+            Faction::Human
+        } else {
+            Faction::Undead
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -68,7 +114,6 @@ impl PendingAction {
 
 #[derive(Clone)]
 pub struct Unit {
-    pub name: String,
     pub faction: Faction,
     pub class: UnitClass,
     pub grid_x: i32,

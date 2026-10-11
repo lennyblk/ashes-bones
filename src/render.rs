@@ -7,13 +7,17 @@ use crate::duel::{DuelConditions, DuelSide};
 use crate::game_mode::{GameMode, TurnPhase};
 use crate::grid::DuelPreview;
 use crate::map::TileMap;
-use crate::minigame::{MiniGame, ResultDisplay, TimingResult};
+use crate::minigame::{MiniGame, MiniGameKind, ResultDisplay, TimingResult};
 use crate::network::Browser;
+use crate::screens::guide::{self, GuidePage};
 use crate::screens::host::{self, HostField, HostForm};
 use crate::screens::multiplayer;
-use crate::screens::{guide, winfo};
-use crate::ui::{self, HudRects};
-use crate::unit::{Faction, Unit, UnitState};
+use crate::screens::practice::{self, Cell, Phase as PracticePhase, Practice, Role};
+use crate::screens::winfo;
+use crate::settings::{self, Bind, tr};
+use crate::trf;
+use crate::ui::{self, HudRects, Skin};
+use crate::unit::{Faction, Unit, UnitClass, UnitState};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE};
 use raylib::prelude::*;
 
@@ -25,15 +29,7 @@ fn unit_source_rec(animation: &Animation, unit: &Unit) -> Rectangle {
     source_rec
 }
 
-fn draw_texture_at(d: &mut RaylibDrawHandle, texture: &Texture2D, rect: Rectangle) {
-    d.draw_texture_ex(
-        texture,
-        Vector2::new(rect.x, rect.y),
-        0.0,
-        1.0,
-        Color::WHITE,
-    );
-}
+
 
 /// avance l'animation puis la dessine
 fn draw_unit_sprite(
@@ -104,31 +100,17 @@ pub fn draw_title_screen(
         );
     }
 
-    draw_texture_at(d, &assets.btn_play_title_screen, hud.btn_play_title_screen);
-    draw_texture_at(
-        d,
-        &assets.btn_multi_title_screen,
-        hud.btn_multi_title_screen,
-    );
-    draw_texture_at(
-        d,
-        &assets.btn_settings_title_screen,
-        hud.btn_settings_title_screen,
-    );
-    draw_texture_at(d, &assets.btn_exit_title_screen, hud.btn_exit_title_screen);
-    draw_texture_at(
-        d,
-        &assets.btn_guide_title_screen,
-        hud.btn_learn_title_screen,
-    );
+    for (rect, label) in [
+        (hud.btn_play_title_screen, tr("Solo", "Solo")),
+        (hud.btn_multi_title_screen, tr("Multiplayer", "Multijoueur")),
+        (hud.btn_settings_title_screen, tr("Settings", "Réglages")),
+        (hud.btn_learn_title_screen, tr("Guide", "Guide")),
+        (hud.btn_exit_title_screen, tr("Exit", "Quitter")),
+    ] {
+        ui::draw_button(d, assets, rect, label, Skin::Menu, mouse_position, true);
+    }
 
-    d.draw_texture_ex(
-        assets.cursor_texture(CursorType::Normal),
-        Vector2::new(mouse_position.x, mouse_position.y),
-        0.0,
-        0.7,
-        Color::WHITE,
-    );
+    draw_cursor(d, assets, mouse_position);
 }
 
 // Pause screen --------------------------------------------------------------------
@@ -139,42 +121,28 @@ pub fn draw_pause_screen(
     mouse_position: Vector2,
 ) {
     draw_fullscreen_texture(d, &assets.menu_background_texture);
-
-    let title = "Pause";
-    let title_size = 48.0;
-    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
-    let title_pos = Vector2::new(
-        SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0,
-        hud.btn_pause_play.y - title_size - 30.0,
-    );
-    // petite ombre pour rester lisible sur un ciel clair
-    d.draw_text_ex(
+    ui::draw_title(
+        d,
         &assets.hud_font,
-        title,
-        title_pos + Vector2::new(2.0, 2.0),
-        title_size,
-        1.0,
-        Color::new(0, 0, 0, 160),
+        tr("Pause", "Pause"),
+        SCREEN_WIDTH as f32 / 2.0,
+        hud.btn_pause_play.y - 48.0 - 30.0,
+        48.0,
     );
-    d.draw_text_ex(
-        &assets.hud_font,
-        title,
-        title_pos,
-        title_size,
-        1.0,
-        Color::WHITE,
-    );
-
-    for (texture, rect) in [
-        (&assets.btn_play, hud.btn_pause_play),
-        (&assets.btn_guide, hud.btn_pause_guide),
-        (&assets.btn_settings, hud.btn_pause_settings),
-        (&assets.btn_back, hud.btn_pause_back),
-        (&assets.btn_exit, hud.btn_pause_exit),
+    for (rect, label) in [
+        (hud.btn_pause_play, tr("Resume", "Reprendre")),
+        (hud.btn_pause_guide, tr("Guide", "Guide")),
+        (hud.btn_pause_settings, tr("Settings", "Réglages")),
+        (hud.btn_pause_back, tr("Main menu", "Menu")),
+        (hud.btn_pause_exit, tr("Exit", "Quitter")),
     ] {
-        draw_texture_at(d, texture, rect);
+        ui::draw_button(d, assets, rect, label, Skin::Wood, mouse_position, true);
     }
+    draw_cursor(d, assets, mouse_position);
+}
 
+/// curseur de la souris (le curseur système est caché)
+fn draw_cursor(d: &mut RaylibDrawHandle, assets: &Assets, mouse_position: Vector2) {
     d.draw_texture_ex(
         assets.cursor_texture(CursorType::Normal),
         Vector2::new(mouse_position.x, mouse_position.y),
@@ -191,253 +159,377 @@ pub fn draw_guide_screen(
     delta_time: f32,
     hud: &HudRects,
     mouse_position: Vector2,
-    scroll: f32,
+    page: GuidePage,
+    online: bool,
 ) {
     draw_fullscreen_texture(d, &assets.menu_background_texture);
+    d.draw_rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Color::new(0, 0, 0, 80));
 
-    let title = "How to play";
-    let title_size = 48.0;
-    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
-    let title_pos = Vector2::new(
-        SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0,
-        guide::HEADER_HEIGHT / 2.0 - title_text_size.y / 2.0,
-    );
-    d.draw_text_ex(
-        &assets.hud_font,
-        title,
-        title_pos + Vector2::new(2.0, 2.0),
-        title_size,
-        1.0,
-        Color::new(0, 0, 0, 160),
-    );
-    d.draw_text_ex(
-        &assets.hud_font,
-        title,
-        title_pos,
-        title_size,
-        1.0,
-        Color::WHITE,
-    );
+    let title = tr("How to play", "Comment jouer");
+    let title_size = 46.0;
+    ui::draw_title(d, &assets.hud_font, title, SCREEN_WIDTH as f32 / 2.0, 22.0, title_size);
+    let _ = delta_time;
+    let assets = &*assets;
 
-    let sprite_size = 190.0;
-    let sprite_top = guide::HEADER_HEIGHT / 2.0 - sprite_size / 2.0 + 10.0;
-    let sprite_offset = title_text_size.x / 2.0 + 90.0;
-    draw_idle_card(
+    // onglets : les pages, puis l'entraînement
+    let tabs = guide::tab_rects();
+    for (i, tab) in tabs.iter().enumerate() {
+        let (label, enabled) = match GuidePage::ALL.get(i) {
+            Some(p) => (p.title().to_string(), true),
+            None => (trf!("Training >" ; "Entraînement >"), !online),
+        };
+        ui::draw_button(d, assets, *tab, &label, Skin::Wood, mouse_position, enabled);
+        if GuidePage::ALL.get(i) == Some(&page) {
+            d.draw_rectangle_lines_ex(*tab, 3.0, ui::GOLD);
+        }
+    }
+
+    match page {
+        GuidePage::Basics => draw_guide_basics(d, assets),
+        GuidePage::MiniGames => draw_guide_minigames(d, assets, mouse_position, online),
+        GuidePage::Positioning => draw_guide_positioning(d, assets, mouse_position, online),
+    }
+
+    ui::draw_button(
         d,
-        &mut assets.cavalry.idle,
-        SCREEN_WIDTH as f32 / 2.0 - sprite_offset,
-        sprite_top,
-        sprite_size,
-        delta_time,
+        assets,
+        hud.btn_guide_back,
+        tr("Back", "Retour"),
+        Skin::Wood,
+        mouse_position,
+        true,
     );
-    draw_idle_card(
-        d,
-        &mut assets.necromancer.idle,
-        SCREEN_WIDTH as f32 / 2.0 + sprite_offset,
-        sprite_top,
-        sprite_size,
-        delta_time,
-    );
+    draw_cursor(d, assets, mouse_position);
+}
 
-    let panel = guide::panel_rect(hud);
-    d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 210));
-    d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
+/// taille des cases des mini grilles du guide
+const DIAGRAM_CELL: f32 = 34.0;
+const TOKEN_BLUE: Color = Color::new(70, 130, 255, 255);
+const TOKEN_RED: Color = Color::new(220, 60, 60, 255);
 
-    // contenu qui scrolle, coupé aux bords du panneau
+/// titre de carte (police pixel, couleur crème)
+fn draw_card_title(d: &mut impl RaylibDraw, assets: &Assets, text: &str, pos: Vector2, size: f32) {
+    d.draw_text_ex(&assets.alert_font, text, pos + Vector2::new(0.0, 2.0), size, 2.0, Color::new(0, 0, 0, 160));
+    d.draw_text_ex(&assets.alert_font, text, pos, size, 2.0, ui::CREAM);
+}
+
+/// mini grille vide : cases d'herbe de `cell` px
+fn draw_mini_grid(d: &mut RaylibDrawHandle, origin: Vector2, cols: i32, rows: i32, cell: f32) {
+    for row in 0..rows {
+        for col in 0..cols {
+            let rect = Rectangle::new(origin.x + col as f32 * cell, origin.y + row as f32 * cell, cell, cell);
+            d.draw_rectangle_rec(rect, Color::new(70, 95, 60, 255));
+            d.draw_rectangle_lines_ex(rect, 1.0, Color::new(0, 0, 0, 90));
+        }
+    }
+}
+
+fn mini_cell(origin: Vector2, col: i32, row: i32, cell: f32) -> Rectangle {
+    Rectangle::new(origin.x + col as f32 * cell, origin.y + row as f32 * cell, cell, cell)
+}
+
+/// jeton rond d'une unité dans une mini grille (anneau blanc = l'unité dont on parle)
+fn draw_token(d: &mut impl RaylibDraw, cell: Rectangle, color: Color, ring: bool) {
+    let center = Vector2::new(cell.x + cell.width / 2.0, cell.y + cell.height / 2.0);
+    let radius = cell.width * 0.36;
+    d.draw_circle_v(center, radius, color);
+    if ring {
+        d.draw_ring(center, radius, radius + 3.0, 0.0, 360.0, 24, Color::WHITE);
+    }
+}
+
+fn draw_guide_basics(d: &mut RaylibDrawHandle, assets: &Assets) {
+    let time = d.get_time() as f32;
+    let steps = [
+        (
+            tr("Select", "Choisis"),
+            tr("Click one of your units. Its stats show at the bottom.", "Clique sur une de tes unités. Ses stats s'affichent en bas."),
+        ),
+        (
+            tr("Move", "Déplace"),
+            tr("Blue tiles show where it can go. Click one to move.", "Les cases bleues montrent où aller. Clique pour t'y rendre."),
+        ),
+        (
+            tr("Attack", "Attaque"),
+            tr("Click a red enemy to attack. Healers click a green ally.", "Clique sur un ennemi rouge. Les soigneurs cliquent un allié vert."),
+        ),
+        (
+            tr("Duel!", "Duel !"),
+            tr("A mini-game sets the damage. Both sides play at once.", "Un mini-jeu décide des dégâts. Les deux camps jouent ensemble."),
+        ),
+    ];
+    for (i, (title, text)) in steps.iter().enumerate() {
+        let card = guide::step_rect(i);
+        ui::draw_panel(d, card);
+        // pastille numérotée
+        let badge = Vector2::new(card.x + 30.0, card.y + 30.0);
+        d.draw_circle_v(badge, 17.0, ui::GOLD);
+        let number = (i + 1).to_string();
+        let size = assets.alert_font.measure_text(&number, 28.0, 1.0);
+        d.draw_text_ex(&assets.alert_font, &number, badge - size * 0.5 + Vector2::new(1.0, 1.0), 28.0, 1.0, Color::new(40, 28, 10, 255));
+        draw_card_title(d, assets, &title.to_uppercase(), Vector2::new(card.x + 58.0, card.y + 16.0), 30.0);
+
+        let scene = Rectangle::new(card.x + 16.0, card.y + 60.0, card.width - 32.0, 116.0);
+        d.draw_rectangle_rec(scene, Color::new(8, 8, 10, 160));
+        draw_basics_scene(d, assets, i, scene, time);
+
+        ui::draw_wrapped(
+            d,
+            &assets.info_font,
+            text,
+            Vector2::new(card.x + 18.0, card.y + 188.0),
+            card.width - 36.0,
+            16.0,
+            Color::new(225, 220, 210, 255),
+        );
+    }
+
+    let (results, controls) = guide::basics_bottom_rects();
+    // résultats du duel ----------------------------------------------------------
+    ui::draw_panel(d, results);
+    draw_card_title(d, assets, &tr("Duel results", "Résultats du duel").to_uppercase(), Vector2::new(results.x + 20.0, results.y + 16.0), 28.0);
+    let col_x = |i: usize| results.x + 250.0 + i as f32 * 98.0;
+    let header_y = results.y + 62.0;
+    for (i, (label, color)) in [
+        (tr("BAD", "RATÉ"), ui::BAD),
+        (tr("GOOD", "BIEN"), Color::ORANGE),
+        (tr("PERFECT", "PARFAIT"), ui::GOOD),
+    ]
+    .iter()
+    .enumerate()
     {
-        let mut clip = d.begin_scissor_mode(
-            panel.x as i32,
-            panel.y as i32,
-            panel.width as i32,
-            panel.height as i32,
-        );
-        let x = panel.x + guide::PANEL_PAD;
-        let width = panel.width - guide::PANEL_PAD * 2.0 - guide::SCROLLBAR_WIDTH;
-        let mut y = panel.y + guide::PANEL_PAD - scroll;
-        for block in guide::content() {
-            let height = block.height();
-            // on ne dessine que ce qui est visible
-            if y + block.draw_extent() >= panel.y && y <= panel.y + panel.height {
-                draw_guide_block(&mut clip, assets, &block, x, y, width);
-            }
-            y += height;
+        let width = assets.info_font.measure_text(label, 15.0, 1.0).x + 16.0;
+        ui::draw_chip(d, &assets.info_font, Vector2::new(col_x(i) + 40.0 - width / 2.0, header_y), label, 15.0, *color);
+    }
+    for (row, (label, values)) in [
+        (tr("You attack: damage dealt", "Tu attaques : dégâts infligés"), [("x0.5", ui::BAD), ("x1", ui::CREAM), ("x1.5", ui::GOOD)]),
+        (tr("You defend: damage taken", "Tu défends : dégâts subis"), [("x1.5", ui::BAD), ("x1", ui::CREAM), ("x0.5", ui::GOOD)]),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let y = header_y + 40.0 + row as f32 * 52.0;
+        ui::draw_wrapped(d, &assets.info_font, label, Vector2::new(results.x + 20.0, y + 2.0), 220.0, 16.0, Color::WHITE);
+        for (i, (value, color)) in values.iter().enumerate() {
+            let size = assets.alert_font.measure_text(value, 34.0, 2.0);
+            d.draw_text_ex(&assets.alert_font, value, Vector2::new(col_x(i) + 40.0 - size.x / 2.0, y), 34.0, 2.0, *color);
         }
     }
+    ui::draw_wrapped(
+        d,
+        &assets.info_font,
+        tr(
+            "Final damage = attack x defense. Wipe out every enemy to win!",
+            "Dégâts finaux = attaque x défense. Élimine tous les ennemis pour gagner !",
+        ),
+        Vector2::new(results.x + 20.0, results.y + results.height - 58.0),
+        results.width - 40.0,
+        16.0,
+        ui::GOLD,
+    );
 
-    // scrollbar (seulement si tout ne tient pas dans le panneau)
-    if guide::max_scroll(hud) > 0.0 {
-        d.draw_rectangle_rec(guide::scrollbar_track(hud), Color::new(255, 255, 255, 40));
-        d.draw_rectangle_rec(
-            guide::scrollbar_thumb(hud, scroll),
-            Color::new(255, 255, 255, 170),
-        );
+    // touches --------------------------------------------------------------------
+    ui::draw_panel(d, controls);
+    draw_card_title(d, assets, &tr("Controls", "Commandes").to_uppercase(), Vector2::new(controls.x + 20.0, controls.y + 16.0), 28.0);
+    let key = |bind: Bind| settings::key_name(settings::key(bind));
+    let rows = [
+        (tr("Click", "Clic").to_string(), tr("Select, move, attack", "Choisir, bouger, attaquer")),
+        (key(Bind::Cancel), tr("Cancel the action", "Annuler l'action")),
+        (key(Bind::EndTurn), tr("End your turn", "Finir ton tour")),
+        (key(Bind::Wait), tr("Unit waits", "L'unité attend")),
+        (key(Bind::MapSpeed), tr("Map speed x1 / x2", "Vitesse carte x1 / x2")),
+        (tr("Esc", "Échap").to_string(), tr("Pause", "Pause")),
+    ];
+    for (i, (cap, label)) in rows.iter().enumerate() {
+        let col = (i / 3) as f32;
+        let row = (i % 3) as f32;
+        let x = controls.x + 20.0 + col * (controls.width / 2.0 - 6.0);
+        let y = controls.y + 66.0 + row * 50.0;
+        let width = ui::draw_keycap(d, &assets.info_font, Vector2::new(x, y), cap, 16.0);
+        ui::draw_wrapped(d, &assets.info_font, label, Vector2::new(x + width + 10.0, y + 3.0), controls.width / 2.0 - width - 40.0, 15.0, Color::WHITE);
     }
+    ui::draw_wrapped(
+        d,
+        &assets.info_font,
+        tr("Change any key in Settings.", "Change les touches dans Réglages."),
+        Vector2::new(controls.x + 20.0, controls.y + controls.height - 40.0),
+        controls.width - 40.0,
+        15.0,
+        ui::MUTED,
+    );
+}
 
-    ui::draw_text_button(d, &assets.hud_font, hud.btn_guide_back, "Back");
+/// petite scène animée de chaque étape de la page Bases
+fn draw_basics_scene(d: &mut RaylibDrawHandle, assets: &Assets, step: usize, scene: Rectangle, time: f32) {
+    let cell = 30.0;
+    match step {
+        0 => {
+            let origin = Vector2::new(scene.x + scene.width / 2.0 - cell * 2.5, scene.y + scene.height / 2.0 - cell * 1.5);
+            draw_mini_grid(d, origin, 5, 3, cell);
+            let pulse = 0.5 + 0.5 * (time * 4.0).sin();
+            let me = mini_cell(origin, 2, 1, cell);
+            d.draw_rectangle_rec(me, Color::new(255, 215, 0, (60.0 + 80.0 * pulse) as u8));
+            draw_token(d, me, TOKEN_BLUE, true);
+            draw_token(d, mini_cell(origin, 0, 2, cell), TOKEN_BLUE, false);
+            d.draw_texture_ex(
+                assets.cursor_texture(CursorType::Hover),
+                Vector2::new(me.x + 18.0, me.y + 16.0),
+                0.0,
+                0.45,
+                Color::WHITE,
+            );
+        }
+        1 => {
+            let origin = Vector2::new(scene.x + scene.width / 2.0 - cell * 3.5, scene.y + scene.height / 2.0 - cell * 1.5);
+            draw_mini_grid(d, origin, 7, 3, cell);
+            for col in 0..7 {
+                for row in 0..3 {
+                    if (col - 2_i32).abs() + (row - 1_i32).abs() <= 2 {
+                        d.draw_rectangle_rec(mini_cell(origin, col, row, cell), Color::new(0, 100, 255, 110));
+                    }
+                }
+            }
+            // l'unité fait l'aller-retour vers la case visée
+            let t = ((time * 0.8).sin() + 1.0) / 2.0;
+            let from = mini_cell(origin, 2, 1, cell);
+            let to = mini_cell(origin, 4, 1, cell);
+            let moving = Rectangle { x: from.x + (to.x - from.x) * t, ..from };
+            d.draw_rectangle_lines_ex(to, 2.0, Color::WHITE);
+            draw_token(d, moving, TOKEN_BLUE, true);
+        }
+        2 => {
+            let origin = Vector2::new(scene.x + scene.width / 2.0 - cell * 3.0, scene.y + scene.height / 2.0 - cell * 1.5);
+            draw_mini_grid(d, origin, 6, 3, cell);
+            let pulse = 0.5 + 0.5 * (time * 4.0).sin();
+            let enemy = mini_cell(origin, 4, 1, cell);
+            d.draw_rectangle_rec(enemy, Color::new(255, 0, 0, (110.0 + 70.0 * pulse) as u8));
+            for (col, row) in [(3, 1), (4, 0), (4, 2)] {
+                d.draw_rectangle_rec(mini_cell(origin, col, row, cell), Color::new(255, 255, 0, 120));
+            }
+            draw_token(d, mini_cell(origin, 1, 1, cell), TOKEN_BLUE, true);
+            draw_token(d, enemy, TOKEN_RED, false);
+            let ally = mini_cell(origin, 1, 2, cell);
+            d.draw_rectangle_rec(ally, Color::new(0, 220, 0, 120));
+            draw_token(d, ally, TOKEN_BLUE, false);
+        }
+        _ => {
+            // barre de timing qui tourne
+            let bar = Rectangle::new(scene.x + 20.0, scene.y + scene.height / 2.0 - 12.0, scene.width - 40.0, 24.0);
+            d.draw_rectangle_rec(bar, Color::DARKGRAY);
+            d.draw_rectangle_rec(Rectangle::new(bar.x + bar.width * 0.55, bar.y, bar.width * 0.2, bar.height), Color::YELLOW);
+            d.draw_rectangle_rec(Rectangle::new(bar.x + bar.width * 0.635, bar.y, bar.width * 0.03, bar.height), Color::GREEN);
+            let t = ((time * 2.2).sin() + 1.0) / 2.0;
+            d.draw_rectangle((bar.x + bar.width * t) as i32 - 2, bar.y as i32 - 5, 4, bar.height as i32 + 10, Color::WHITE);
+            let label = tr("PERFECT!", "PARFAIT !");
+            let size = assets.alert_font.measure_text(label, 26.0, 2.0);
+            let in_green = (0.635..=0.665).contains(&t);
+            if in_green || (time * 2.0) as i32 % 3 == 0 {
+                d.draw_text_ex(&assets.alert_font, label, Vector2::new(scene.x + scene.width / 2.0 - size.x / 2.0, bar.y - 36.0), 26.0, 2.0, ui::GOOD);
+            }
+        }
+    }
+}
 
-    d.draw_texture_ex(
-        assets.cursor_texture(CursorType::Normal),
-        Vector2::new(mouse_position.x, mouse_position.y),
+fn draw_guide_minigames(d: &mut RaylibDrawHandle, assets: &Assets, mouse: Vector2, online: bool) {
+    for (i, kind) in MiniGameKind::ALL.iter().enumerate() {
+        let card = guide::minigame_rect(i);
+        let hovered = !online && card.check_collision_point_rec(mouse);
+        ui::draw_panel(d, card);
+        if hovered {
+            d.draw_rectangle_rounded_lines_ex(card, 0.04, 8, 2.0, ui::GOLD);
+        }
+        let illustration = Rectangle::new(card.x + 9.0, card.y + 10.0, card.width - 18.0, 96.0);
+        draw_guide_illustration(d, *kind, illustration);
+        draw_card_title(d, assets, &kind.name().to_uppercase(), Vector2::new(card.x + 16.0, card.y + 116.0), 28.0);
+        let classes: Vec<&str> = kind.classes().iter().map(|c| c.name()).collect();
+        d.draw_text_ex(&assets.info_font, &classes.join(" · "), Vector2::new(card.x + 16.0, card.y + 148.0), 14.0, 1.0, ui::MUTED);
+        for (j, line) in kind.rule().iter().enumerate() {
+            d.draw_text_ex(&assets.info_font, line, Vector2::new(card.x + 16.0, card.y + 170.0 + j as f32 * 19.0), 16.0, 1.0, Color::WHITE);
+        }
+        let label = if online { tr("Solo only", "Solo uniquement") } else { tr("Try it", "Essayer") };
+        ui::draw_button(d, assets, guide::try_rect(card), label, Skin::Wood, mouse, !online);
+    }
+}
+
+fn draw_guide_positioning(d: &mut RaylibDrawHandle, assets: &Assets, mouse: Vector2, online: bool) {
+    for (i, card_info) in guide::position_cards().iter().enumerate() {
+        let card = guide::position_rect(i);
+        let hovered = !online && card.check_collision_point_rec(mouse);
+        ui::draw_panel(d, card);
+        if hovered {
+            d.draw_rectangle_rounded_lines_ex(card, 0.04, 8, 2.0, ui::GOLD);
+        }
+        draw_card_title(d, assets, &card_info.title.to_uppercase(), Vector2::new(card.x + 18.0, card.y + 14.0), 28.0);
+        let rows = card_info.rows.len() as f32;
+        draw_guide_diagram(d, assets, card_info.rows, card.x + 22.0, card.y + 56.0 + (3.0 - rows) * DIAGRAM_CELL / 2.0);
+        let text_x = card.x + 22.0 + 3.0 * DIAGRAM_CELL + 18.0;
+        let text_width = card.x + card.width - 16.0 - text_x;
+        let used = ui::draw_wrapped(d, &assets.info_font, card_info.lines[0], Vector2::new(text_x, card.y + 58.0), text_width, 16.0, Color::WHITE);
+        ui::draw_wrapped(d, &assets.info_font, card_info.lines[1], Vector2::new(text_x, card.y + 64.0 + used), text_width, 16.0, ui::GOLD);
+        let label = if online { tr("Solo only", "Solo uniquement") } else { tr("Try it", "Essayer") };
+        ui::draw_button(d, assets, guide::try_rect(card), label, Skin::Wood, mouse, !online);
+    }
+    let last = guide::position_rect(5);
+    ui::draw_wrapped(
+        d,
+        &assets.info_font,
+        tr(
+            "Effects add up: combine them! Under 30% HP, your green zone grows (comeback).",
+            "Les effets s'additionnent : combine-les ! Sous 30% de PV, ta zone verte grandit.",
+        ),
+        Vector2::new(guide::position_rect(0).x + 4.0, last.y + last.height + 12.0),
+        last.x + last.width - guide::position_rect(0).x,
+        16.0,
+        ui::CREAM,
+    );
+}
+
+/// portrait d'une classe dans `rect` : la frame idle recadrée sur le personnage, ratio
+/// gardé, posé en bas du rectangle. Tourné vers la gauche si `flip`
+fn draw_class_portrait(d: &mut RaylibDrawHandle, assets: &Assets, class: UnitClass, rect: Rectangle, flip: bool) {
+    let animation = assets_idle(assets, class);
+    let frame = animation.animation_frame();
+    let bounds = assets.portrait(class);
+    let mut source = Rectangle::new(frame.x + bounds.x, frame.y + bounds.y, bounds.width, bounds.height);
+    let scale = (rect.width / source.width).min(rect.height / source.height);
+    let (width, height) = (source.width * scale, source.height * scale);
+    if flip {
+        source.width = -source.width;
+    }
+    d.draw_texture_pro(
+        &animation.texture,
+        source,
+        Rectangle::new(rect.x + (rect.width - width) / 2.0, rect.y + rect.height - height, width, height),
+        Vector2::zero(),
         0.0,
-        0.7,
         Color::WHITE,
     );
 }
 
-fn draw_guide_block(
-    d: &mut impl RaylibDraw,
-    assets: &Assets,
-    block: &guide::Block,
-    x: f32,
-    y: f32,
-    width: f32,
-) {
-    match block {
-        guide::Block::Heading(title) => {
-            d.draw_text_ex(
-                &assets.hud_font,
-                title,
-                Vector2::new(x, y + 8.0),
-                guide::HEADING_SIZE,
-                1.0,
-                Color::GOLD,
-            );
-            d.draw_rectangle(
-                x as i32,
-                (y + 8.0 + guide::HEADING_SIZE + 2.0) as i32,
-                width as i32,
-                2,
-                Color::new(255, 203, 0, 120),
-            );
-        }
-        guide::Block::Text(line) => {
-            d.draw_text_ex(
-                &assets.info_font,
-                line,
-                Vector2::new(x, y),
-                guide::TEXT_SIZE,
-                1.0,
-                Color::WHITE,
-            );
-        }
-        guide::Block::Gap => {}
-        guide::Block::Diagram { rows, caption } => {
-            draw_guide_diagram(d, assets, rows, x, y);
-            let columns = rows
-                .iter()
-                .map(|row| row.chars().filter(|c| !c.is_whitespace()).count())
-                .max()
-                .unwrap_or(0);
-            // légendes alignées sur une même colonne (min 3 cases de large)
-            let caption_x = x + columns.max(3) as f32 * guide::DIAGRAM_CELL + 24.0;
-            for (i, line) in caption.iter().enumerate() {
-                d.draw_text_ex(
-                    &assets.info_font,
-                    line,
-                    Vector2::new(caption_x, y + 4.0 + i as f32 * 24.0),
-                    guide::CAPTION_SIZE,
-                    1.0,
-                    if i == 0 { Color::WHITE } else { guide::MUTED },
-                );
-            }
-        }
-        guide::Block::Bar {
-            window,
-            precision,
-            cursor,
-            lives,
-            caption,
-        } => {
-            let lives_space = 50.0;
-            let bar_x = x + lives_space;
-            let bar_y = y + 12.0;
-            let bar_width = 300.0;
-            let bar_height = 22.0;
-            d.draw_rectangle(
-                bar_x as i32,
-                bar_y as i32,
-                bar_width as i32,
-                bar_height as i32,
-                Color::DARKGRAY,
-            );
-            // zones centrées dans la barre d'exemple
-            let zone_x = bar_x + (0.5 - window / 2.0) * bar_width;
-            d.draw_rectangle(
-                zone_x as i32,
-                bar_y as i32,
-                (window * bar_width) as i32,
-                bar_height as i32,
-                Color::YELLOW,
-            );
-            let perfect_x = bar_x + (0.5 - precision / 2.0) * bar_width;
-            d.draw_rectangle(
-                perfect_x as i32,
-                bar_y as i32,
-                (precision * bar_width).ceil() as i32,
-                bar_height as i32,
-                Color::GREEN,
-            );
-            d.draw_rectangle(
-                (bar_x + cursor * bar_width) as i32 - 2,
-                bar_y as i32 - 4,
-                4,
-                bar_height as i32 + 8,
-                Color::WHITE,
-            );
-            for i in 0..*lives {
-                d.draw_rectangle(
-                    (bar_x - 20.0 - i as f32 * 16.0) as i32,
-                    (bar_y + 5.0) as i32,
-                    12,
-                    12,
-                    Color::RED,
-                );
-            }
-            d.draw_text_ex(
-                &assets.info_font,
-                caption,
-                Vector2::new(bar_x + bar_width + 20.0, bar_y + 1.0),
-                guide::CAPTION_SIZE,
-                1.0,
-                guide::MUTED,
-            );
-        }
-        guide::Block::Panel(lines) => {
-            let rect = Rectangle::new(
-                x,
-                y + 6.0,
-                width.min(700.0),
-                lines.len() as f32 * 22.0 + 16.0,
-            );
-            d.draw_rectangle_rec(rect, Color::new(10, 10, 10, 235));
-            d.draw_rectangle_lines_ex(rect, 2.0, guide::GOOD);
-            for (i, (line, color)) in lines.iter().enumerate() {
-                d.draw_text_ex(
-                    &assets.info_font,
-                    line,
-                    Vector2::new(rect.x + 10.0, rect.y + 8.0 + i as f32 * 22.0),
-                    17.0,
-                    1.0,
-                    *color,
-                );
-            }
-        }
-        guide::Block::Illustration(kind) => {
-            let rect = Rectangle::new(
-                x + width - guide::ILLUSTRATION_WIDTH,
-                y,
-                guide::ILLUSTRATION_WIDTH,
-                guide::ILLUSTRATION_HEIGHT,
-            );
-            draw_guide_illustration(d, kind, rect);
-        }
+/// animation idle d'une classe (pour en dessiner une frame figée)
+fn assets_idle(assets: &Assets, class: UnitClass) -> &Animation {
+    match class {
+        UnitClass::Soldier => &assets.soldier.idle,
+        UnitClass::Cavalry => &assets.cavalry.idle,
+        UnitClass::Assassin => &assets.assassin.idle,
+        UnitClass::Longbowman => &assets.longbowman.idle,
+        UnitClass::Mage => &assets.mage.idle,
+        UnitClass::Priest => &assets.priest.idle,
+        UnitClass::Wraith => &assets.wraith.idle,
+        UnitClass::Banshee => &assets.banshee.idle,
+        UnitClass::BloodKnight => &assets.blood_knight.idle,
+        UnitClass::Ghoul => &assets.ghoul.idle,
+        UnitClass::Skeleton => &assets.skeleton.idle,
+        UnitClass::Necromancer => &assets.necromancer.idle,
     }
 }
+
+
 
 /// mini grille du guide : jetons bleus pour ton camp, rouges pour l'ennemi,
 /// cases jaunes avec badge pour les choix de case
 fn draw_guide_diagram(d: &mut impl RaylibDraw, assets: &Assets, rows: &[&str], x: f32, y: f32) {
-    let cell = guide::DIAGRAM_CELL;
+    let cell = DIAGRAM_CELL;
     for (row_i, row) in rows.iter().enumerate() {
         for (col_i, c) in row.chars().filter(|c| !c.is_whitespace()).enumerate() {
             let rect = Rectangle::new(x + col_i as f32 * cell, y + row_i as f32 * cell, cell, cell);
@@ -478,10 +570,10 @@ fn draw_guide_diagram(d: &mut impl RaylibDraw, assets: &Assets, rows: &[&str], x
             }
 
             let badge = match c {
-                '2' => Some(("+25", guide::GOOD)),
-                '1' => Some(("+12", guide::GOOD)),
+                '2' => Some(("+25", ui::GOOD)),
+                '1' => Some(("+12", ui::GOOD)),
                 '0' => Some(("0", Color::WHITE)),
-                'n' => Some(("-4", guide::BAD)),
+                'n' => Some(("-4", ui::BAD)),
                 _ => None,
             };
             if let Some((label, color)) = badge {
@@ -536,12 +628,14 @@ const LOBBY_HUMAN: Color = Color::new(120, 170, 255, 255);
 const LOBBY_UNDEAD: Color = Color::new(230, 100, 100, 255);
 const LOBBY_OPEN: Color = Color::new(120, 230, 120, 255);
 // décalage de chaque colonne depuis le bord gauche des lignes
-const LOBBY_COLUMNS: [(&str, f32); 4] = [
-    ("GAME", 0.0),
-    ("HOST", 380.0),
-    ("HOST FACTION", 620.0),
-    ("PLAYERS", 880.0),
-];
+fn lobby_columns() -> [(&'static str, f32); 4] {
+    [
+        (tr("GAME", "PARTIE"), 0.0),
+        (tr("HOST", "HÔTE"), 380.0),
+        (tr("HOST FACTION", "FACTION DE L'HÔTE"), 620.0),
+        (tr("PLAYERS", "JOUEURS"), 880.0),
+    ]
+}
 
 pub fn draw_multiplayer_screen(
     d: &mut RaylibDrawHandle,
@@ -557,7 +651,7 @@ pub fn draw_multiplayer_screen(
     draw_fullscreen_texture(d, &assets.menu_background_texture);
 
     // titre entre deux persos idle (pas ceux du guide)
-    let title = "Multiplayer";
+    let title = tr("Multiplayer", "Multijoueur");
     let title_size = 48.0;
     let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
     let header_middle = multiplayer::PANEL.y / 2.0;
@@ -613,7 +707,7 @@ pub fn draw_multiplayer_screen(
 
     d.draw_text_ex(
         heading_font,
-        "Open games",
+        tr("Open games", "Parties ouvertes"),
         Vector2::new(left, 122.0),
         30.0,
         1.0,
@@ -621,7 +715,8 @@ pub fn draw_multiplayer_screen(
     );
     if let Some(browser) = browser {
         let count = browser.games().len();
-        let found = format!("{count} game{} found", if count == 1 { "" } else { "s" });
+        let plural = if count == 1 { "" } else { "s" };
+        let found = trf!("{} game{} found", count, plural ; "{} partie{} trouvée{}", count, plural, plural);
         let size = font.measure_text(&found, 20.0, 1.0);
         let refresh = hud.btn_mp_refresh;
         d.draw_text_ex(
@@ -635,7 +730,7 @@ pub fn draw_multiplayer_screen(
             1.0,
             LOBBY_MUTED,
         );
-        ui::draw_text_button(d, heading_font, refresh, "Refresh");
+        ui::draw_button(d, assets, refresh, tr("Refresh", "Actualiser"), Skin::Wood, mouse_position, true);
     }
     d.draw_line_ex(
         Vector2::new(left, 172.0),
@@ -644,7 +739,8 @@ pub fn draw_multiplayer_screen(
         LOBBY_GOLD,
     );
     let columns_x = multiplayer::row_rect(0).x + 12.0;
-    for (label, offset) in LOBBY_COLUMNS {
+    let columns = lobby_columns();
+    for (label, offset) in columns {
         d.draw_text_ex(
             font,
             label,
@@ -657,10 +753,14 @@ pub fn draw_multiplayer_screen(
 
     // lignes, ou un message quand il n'y a rien à lister
     let message = match browser {
-        None => Some("Port 6667 is already in use on this PC"),
-        Some(browser) if browser.games().is_empty() => {
-            Some("Searching for games on your network...")
-        }
+        None => Some(tr(
+            "Port 6667 is already in use on this PC",
+            "Le port 6667 est déjà utilisé sur ce PC",
+        )),
+        Some(browser) if browser.games().is_empty() => Some(tr(
+            "Searching for games on your network...",
+            "Recherche de parties sur ton réseau...",
+        )),
         Some(_) => None,
     };
     if let Some(message) = message {
@@ -706,7 +806,7 @@ pub fn draw_multiplayer_screen(
         d.draw_text_ex(
             font,
             &fit_text(font, &info.name, 20.0, 360.0),
-            cell(LOBBY_COLUMNS[0].1),
+            cell(columns[0].1),
             20.0,
             1.0,
             dim(Color::WHITE),
@@ -714,16 +814,16 @@ pub fn draw_multiplayer_screen(
         d.draw_text_ex(
             font,
             &fit_text(font, &info.host_name, 20.0, 220.0),
-            cell(LOBBY_COLUMNS[1].1),
+            cell(columns[1].1),
             20.0,
             1.0,
             dim(Color::WHITE),
         );
         let (icon, faction_name, faction_color) = match info.host_faction {
-            Faction::Human => (&assets.soldier.idle, "Human", LOBBY_HUMAN),
-            Faction::Undead => (&assets.skeleton.idle, "Undead", LOBBY_UNDEAD),
+            Faction::Human => (&assets.soldier.idle, tr("Human", "Humains"), LOBBY_HUMAN),
+            Faction::Undead => (&assets.skeleton.idle, tr("Undead", "Morts-vivants"), LOBBY_UNDEAD),
         };
-        let faction_x = columns_x + LOBBY_COLUMNS[2].1;
+        let faction_x = columns_x + columns[2].1;
         draw_animation_frame(
             d,
             icon,
@@ -742,14 +842,14 @@ pub fn draw_multiplayer_screen(
         let (players, players_color) = if !info.is_compatible() {
             (format!("v{}", info.version), LOBBY_UNDEAD)
         } else if info.full {
-            (String::from("FULL"), LOBBY_UNDEAD)
+            (tr("FULL", "PLEINE").to_string(), LOBBY_UNDEAD)
         } else {
             (String::from("1/2"), LOBBY_OPEN)
         };
         d.draw_text_ex(
             font,
             &players,
-            cell(LOBBY_COLUMNS[3].1),
+            cell(columns[3].1),
             20.0,
             1.0,
             dim(players_color),
@@ -757,7 +857,7 @@ pub fn draw_multiplayer_screen(
     }
 
     if let Some(lan_game) = games.iter().find(|g| Some(g.address) == selected) {
-        let text = format!("Selected: {}", lan_game.info.name);
+        let text = trf!("Selected: {}", lan_game.info.name ; "Sélection : {}", lan_game.info.name);
         let text = fit_text(font, &text, 20.0, panel.width - 48.0);
         let size = font.measure_text(&text, 20.0, 1.0);
         d.draw_text_ex(
@@ -776,10 +876,10 @@ pub fn draw_multiplayer_screen(
         let name = games
             .iter()
             .find(|g| Some(g.address) == selected)
-            .map_or(String::from("the game"), |g| g.info.name.clone());
+            .map_or(tr("the game", "la partie").to_string(), |g| g.info.name.clone());
         let text = fit_text(
             font,
-            &format!("Connecting to {name}..."),
+            &trf!("Connecting to {}...", name ; "Connexion à {}...", name),
             30.0,
             panel.width - 48.0,
         );
@@ -811,17 +911,12 @@ pub fn draw_multiplayer_screen(
         );
     }
 
-    let back_label = if connecting { "Cancel" } else { "Back" };
-    ui::draw_text_button(d, heading_font, hud.btn_mp_back, back_label);
+    let back_label = if connecting { tr("Cancel", "Annuler") } else { tr("Back", "Retour") };
+    ui::draw_button(d, assets, hud.btn_mp_back, back_label, Skin::Wood, mouse_position, true);
     if !connecting {
-        draw_texture_in(d, &assets.btn_host, hud.btn_mp_host, Color::WHITE);
+        ui::draw_button(d, assets, hud.btn_mp_host, tr("Host game", "Créer"), Skin::Wood, mouse_position, true);
         // grisé tant qu'aucune partie n'est sélectionnée
-        let join_tint = if selected.is_some() {
-            Color::WHITE
-        } else {
-            Color::new(110, 110, 110, 200)
-        };
-        draw_texture_in(d, &assets.btn_join, hud.btn_mp_join, join_tint);
+        ui::draw_button(d, assets, hud.btn_mp_join, tr("Join", "Rejoindre"), Skin::Wood, mouse_position, selected.is_some());
     }
 
     d.draw_texture_ex(
@@ -847,7 +942,7 @@ pub fn draw_host_screen(
     draw_fullscreen_texture(d, &assets.menu_background_texture);
 
     // titre entre deux persos idle (ni ceux du guide, ni ceux de la liste)
-    let title = "Host a game";
+    let title = tr("Host a game", "Créer une partie");
     let title_size = 48.0;
     let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
     let header_middle = host::PANEL.y / 2.0;
@@ -897,8 +992,8 @@ pub fn draw_host_screen(
 
     // champs texte : le champ actif a une bordure dorée
     for (field, label, text) in [
-        (HostField::GameName, "GAME NAME", &form.game_name),
-        (HostField::PlayerName, "YOUR NAME", &form.player_name),
+        (HostField::GameName, tr("GAME NAME", "NOM DE LA PARTIE"), &form.game_name),
+        (HostField::PlayerName, tr("YOUR NAME", "TON NOM"), &form.player_name),
     ] {
         let rect = host::field_rect(field);
         let focused = form.focus == field;
@@ -925,7 +1020,7 @@ pub fn draw_host_screen(
     // choix de faction : carte avec le perso idle, la faction choisie en doré
     d.draw_text_ex(
         &assets.info_font,
-        "YOUR FACTION",
+        tr("YOUR FACTION", "TA FACTION"),
         Vector2::new(
             host::faction_rect(Faction::Human).x,
             host::faction_rect(Faction::Human).y - 26.0,
@@ -935,8 +1030,8 @@ pub fn draw_host_screen(
         LOBBY_MUTED,
     );
     for (faction, name, color) in [
-        (Faction::Human, "Human", LOBBY_HUMAN),
-        (Faction::Undead, "Undead", LOBBY_UNDEAD),
+        (Faction::Human, tr("Human", "Humains"), LOBBY_HUMAN),
+        (Faction::Undead, tr("Undead", "Morts-vivants"), LOBBY_UNDEAD),
     ] {
         let rect = host::faction_rect(faction);
         let chosen = form.faction == faction;
@@ -983,9 +1078,9 @@ pub fn draw_host_screen(
     if waiting {
         d.draw_rectangle_rec(panel, Color::new(0, 0, 0, 170));
         for (text, size, color, dy) in [
-            ("Waiting for an opponent...", 30.0, Color::WHITE, -20.0),
+            (tr("Waiting for an opponent...", "En attente d'un adversaire..."), 30.0, Color::WHITE, -20.0),
             (
-                "Your game is visible on the local network",
+                tr("Your game is visible on the local network", "Ta partie est visible sur le réseau local"),
                 18.0,
                 LOBBY_MUTED,
                 22.0,
@@ -1020,16 +1115,11 @@ pub fn draw_host_screen(
         );
     }
 
-    let back_label = if waiting { "Cancel" } else { "Back" };
-    ui::draw_text_button(d, &assets.hud_font, hud.btn_mp_back, back_label);
+    let back_label = if waiting { tr("Cancel", "Annuler") } else { tr("Back", "Retour") };
+    ui::draw_button(d, assets, hud.btn_mp_back, back_label, Skin::Wood, mouse_position, true);
     if !waiting {
         // grisé tant qu'un nom manque
-        let host_tint = if form.is_complete() {
-            Color::WHITE
-        } else {
-            Color::new(110, 110, 110, 200)
-        };
-        draw_texture_in(d, &assets.btn_host, hud.btn_mp_join, host_tint);
+        ui::draw_button(d, assets, hud.btn_mp_join, tr("Host game", "Créer"), Skin::Wood, mouse_position, form.is_complete());
     }
 
     d.draw_texture_ex(
@@ -1053,17 +1143,7 @@ fn fit_text(font: &Font, text: &str, size: f32, max_width: f32) -> String {
     format!("{cut}...")
 }
 
-/// texture étirée pour remplir `rect` (ex : bouton dessiné plus petit que son image)
-fn draw_texture_in(d: &mut RaylibDrawHandle, texture: &Texture2D, rect: Rectangle, tint: Color) {
-    d.draw_texture_pro(
-        texture,
-        Rectangle::new(0.0, 0.0, texture.width as f32, texture.height as f32),
-        rect,
-        Vector2::new(0.0, 0.0),
-        0.0,
-        tint,
-    );
-}
+
 
 /// frame courante d'une animation dans `rect`, sans la faire avancer, ratio gardé
 fn draw_animation_frame(
@@ -1157,7 +1237,7 @@ pub fn draw_faction_selection_screen(
         Color::new(255, 255, 255, 5),
     );
 
-    let title = "Choose your faction";
+    let title = tr("Choose your faction", "Choisis ta faction");
     let title_size = 64.0;
     let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
     d.draw_text_ex(
@@ -1172,7 +1252,10 @@ pub fn draw_faction_selection_screen(
     let human_center_x = SCREEN_WIDTH as f32 / 4.0;
     let undead_center_x = SCREEN_WIDTH as f32 * 3.0 / 4.0;
 
-    for (label, center_x) in [("Human", human_center_x), ("Undead", undead_center_x)] {
+    for (label, center_x) in [
+        (tr("Human", "Humains"), human_center_x),
+        (tr("Undead", "Morts-vivants"), undead_center_x),
+    ] {
         let label_size = 48.0;
         let label_text_size = assets.hud_font.measure_text(label, label_size, 1.0);
         d.draw_text_ex(
@@ -1334,25 +1417,29 @@ pub fn draw_grid_screen(
 ) {
     d.clear_background(Color::BEIGE);
     tile_map.draw(d);
+    let options = settings::get();
 
-    // for i in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
-    //     d.draw_rectangle_lines(0, i, SCREEN_WIDTH, 1, Color::BLACK);
-    // }
-    //
-    // for i in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
-    //     d.draw_rectangle_lines(i, 0, 1, SCREEN_HEIGHT, Color::BLACK);
-    // }
+    // lignes de la grille (réglage)
+    if options.grid_lines {
+        let line = Color::new(0, 0, 0, 45);
+        for y in (0..SCREEN_HEIGHT).step_by(TILE_SIZE as usize) {
+            d.draw_rectangle(0, y, SCREEN_WIDTH, 1, line);
+        }
+        for x in (0..SCREEN_WIDTH).step_by(TILE_SIZE as usize) {
+            d.draw_rectangle(x, 0, 1, SCREEN_HEIGHT, line);
+        }
+    }
 
     match current_turn {
         TurnPhase::PlayerTurn => {
-            draw_texture_at(d, &assets.banner_your_turn, hud.banner_your_turn);
-            draw_texture_at(d, &assets.btn_end_turn, hud.btn_end_turn);
+            ui::draw_banner(d, assets, hud.banner_your_turn, tr("Your turn", "Ton tour"), false);
+            ui::draw_button(d, assets, hud.btn_end_turn, tr("End turn", "Fin du tour"), Skin::Wood, mouse_position, true);
             if wait_button_visible {
-                draw_texture_at(d, &assets.btn_wait, hud.btn_wait);
+                ui::draw_button(d, assets, hud.btn_wait, tr("Wait", "Attendre"), Skin::Wood, mouse_position, true);
             }
         }
         TurnPhase::EnemyTurn => {
-            draw_texture_at(d, &assets.banner_enemy_turn, hud.banner_enemy_turn);
+            ui::draw_banner(d, assets, hud.banner_enemy_turn, tr("Enemy turn", "Tour ennemi"), true);
         }
     }
     if game_mode == GameMode::GridScreen {
@@ -1436,8 +1523,10 @@ pub fn draw_grid_screen(
         }
     }
 
-    draw_position_scores(d, assets, position_scores);
-    if let Some(preview) = duel_preview {
+    if options.tile_bonuses {
+        draw_position_scores(d, assets, position_scores);
+    }
+    if let Some(preview) = duel_preview.filter(|_| options.attack_preview) {
         draw_duel_preview(d, assets, units, preview);
     }
 
@@ -1450,8 +1539,8 @@ pub fn draw_grid_screen(
 
     // écran de fin ----------------------------------------------------------
     let end_text = match game_mode {
-        GameMode::Victory => Some(("VICTORY", Color::GOLD)),
-        GameMode::Defeat => Some(("DEFEAT", Color::RED)),
+        GameMode::Victory => Some((tr("VICTORY", "VICTOIRE"), Color::GOLD)),
+        GameMode::Defeat => Some((tr("DEFEAT", "DÉFAITE"), Color::RED)),
         _ => None,
     };
     if let Some((text, color)) = end_text {
@@ -1469,7 +1558,7 @@ pub fn draw_grid_screen(
             color,
         );
         if waiting_rematch {
-            let text = "Waiting for opponent...";
+            let text = tr("Waiting for opponent...", "En attente de l'adversaire...");
             let size = assets.alert_font.measure_text(text, 32.0, 1.0);
             d.draw_text_ex(
                 &assets.alert_font,
@@ -1484,12 +1573,12 @@ pub fn draw_grid_screen(
                 Color::WHITE,
             );
         }
-        for (texture, rect) in [
-            (&assets.btn_retry, hud.btn_retry),
-            (&assets.btn_back, hud.btn_back),
-            (&assets.btn_exit, hud.btn_exit),
+        for (rect, label) in [
+            (hud.btn_retry, tr("Retry", "Rejouer")),
+            (hud.btn_back, tr("Main menu", "Menu")),
+            (hud.btn_exit, tr("Exit", "Quitter")),
         ] {
-            draw_texture_at(d, texture, rect);
+            ui::draw_button(d, assets, rect, label, Skin::Wood, mouse_position, true);
         }
     }
 
@@ -1514,7 +1603,7 @@ fn draw_unit_info(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit, rect: 
 
     d.draw_text_ex(
         &assets.info_font,
-        &unit.name,
+        unit.class.name(),
         Vector2::new(x, y),
         16.0 * s,
         1.0,
@@ -1534,11 +1623,11 @@ fn draw_unit_info(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit, rect: 
     y += 10.0 * s;
 
     let lines = [
-        format!("HP {}/{}", unit.hp_points, unit.hp_max_points),
-        format!("ATK {}  DEF {}", unit.attack_power, unit.defense),
-        format!(
-            "RNG {}  MOV {}/{}",
-            unit.attack_range, unit.move_points_remaining, unit.move_points
+        trf!("HP {}/{}", unit.hp_points, unit.hp_max_points ; "PV {}/{}", unit.hp_points, unit.hp_max_points),
+        trf!("ATK {}  DEF {}", unit.attack_power, unit.defense ; "ATQ {}  DÉF {}", unit.attack_power, unit.defense),
+        trf!(
+            "RNG {}  MOV {}/{}", unit.attack_range, unit.move_points_remaining, unit.move_points ;
+            "POR {}  DÉP {}/{}", unit.attack_range, unit.move_points_remaining, unit.move_points
         ),
     ];
     for line in &lines {
@@ -1662,7 +1751,7 @@ pub fn draw_combat_screen(
 }
 
 fn draw_waiting_for_opponent(d: &mut RaylibDrawHandle, assets: &Assets) {
-    let text = "Waiting for opponent...";
+    let text = tr("Waiting for opponent...", "En attente de l'adversaire...");
     let text_size = assets.alert_font.measure_text(text, 40.0, 1.0);
     d.draw_text_ex(
         &assets.alert_font,
@@ -1701,7 +1790,7 @@ fn draw_unit_hud(d: &mut RaylibDrawHandle, assets: &Assets, unit: &Unit) {
     );
     d.draw_text_ex(
         &assets.hud_font,
-        &unit.name,
+        unit.class.name(),
         Vector2::new(bar_x, bar_y + bar_height + 10.0),
         24.0,
         1.0,
@@ -1716,9 +1805,9 @@ fn draw_timing_result(
     player_is_attacker: bool,
 ) {
     let label = |r: TimingResult| match r {
-        TimingResult::Bad => ("BAD", Color::RED),
-        TimingResult::Good => ("GOOD", Color::ORANGE),
-        TimingResult::Perfect => ("PERFECT", Color::LIME),
+        TimingResult::Bad => (tr("BAD", "RATÉ"), Color::RED),
+        TimingResult::Good => (tr("GOOD", "BIEN"), Color::ORANGE),
+        TimingResult::Perfect => (tr("PERFECT", "PARFAIT"), Color::LIME),
     };
     // le résultat du joueur d'abord, celui d'en face ensuite
     let (mine, theirs) = match shown.parry {
@@ -1731,7 +1820,7 @@ fn draw_timing_result(
         None => format!("{} x{:.1}", mine_text, shown.multiplier),
     };
 
-    let text_size = assets.hud_font.measure_text(&full_text, 40.0, 1.0);
+    let text_size = assets.alert_font.measure_text(&full_text, 40.0, 1.0);
     d.draw_text_ex(
         &assets.alert_font,
         &full_text,
@@ -1747,21 +1836,15 @@ fn draw_timing_result(
 
 // preview du duel ------------------------------------------------------------
 
-const GOOD_FOR_ME: Color = Color::new(120, 230, 120, 255);
-const BAD_FOR_ME: Color = Color::new(255, 110, 110, 255);
-const MUTED: Color = Color::new(180, 180, 180, 255);
-// taille globale des fenêtres de preview (panneau, badges, facteurs en combat)
-const PREVIEW_SCALE: f32 = 1.6;
-
 fn score_color(score: i32) -> Color {
     match score {
-        s if s > 0 => GOOD_FOR_ME,
-        s if s < 0 => BAD_FOR_ME,
-        _ => Color::WHITE,
+        s if s > 0 => ui::GOOD,
+        s if s < 0 => ui::BAD,
+        _ => Color::new(200, 190, 170, 255),
     }
 }
 
-/// petit badge +2 / -1 dans le coin de chaque case d'attaque possible
+/// petit badge +12 / -4 dans le coin de chaque case d'attaque possible
 fn draw_position_scores(
     d: &mut RaylibDrawHandle,
     assets: &Assets,
@@ -1773,20 +1856,19 @@ fn draw_position_scores(
         } else {
             score.to_string()
         };
-        // "+12" doit tenir dans une case de 48 px
-        let font_size = 12.0 * PREVIEW_SCALE;
+        let font_size = 17.0;
         let size = assets.info_font.measure_text(&text, font_size, 1.0);
         let rect = Rectangle::new(
             (x * TILE_SIZE) as f32 + 2.0,
             (y * TILE_SIZE) as f32 + 2.0,
-            size.x + 6.0 * PREVIEW_SCALE,
-            size.y + 2.0 * PREVIEW_SCALE,
+            size.x + 8.0,
+            size.y + 2.0,
         );
-        d.draw_rectangle_rec(rect, Color::new(20, 20, 20, 200));
+        d.draw_rectangle_rounded(rect, 0.4, 6, Color::new(16, 14, 18, 220));
         d.draw_text_ex(
             &assets.info_font,
             &text,
-            Vector2::new(rect.x + 3.0 * PREVIEW_SCALE, rect.y + PREVIEW_SCALE),
+            Vector2::new(rect.x + 4.0, rect.y + 1.0),
             font_size,
             1.0,
             score_color(*score),
@@ -1794,39 +1876,12 @@ fn draw_position_scores(
     }
 }
 
-/// mini barre de timing : zone jaune + parfait vert, à l'échelle de la vraie
-fn draw_mini_bar(d: &mut RaylibDrawHandle, x: f32, y: f32, width: f32, side: &DuelSide) {
-    let h = (8.0 * PREVIEW_SCALE) as i32;
-    d.draw_rectangle(x as i32, y as i32, width as i32, h, Color::DARKGRAY);
-    let zone_x = x + width / 2.0 - side.window * width / 2.0;
-    d.draw_rectangle(
-        zone_x as i32,
-        y as i32,
-        (side.window * width) as i32,
-        h,
-        Color::YELLOW,
-    );
-    let perfect_x = x + width / 2.0 - side.precision * width / 2.0;
-    d.draw_rectangle(
-        perfect_x as i32,
-        y as i32,
-        (side.precision * width).ceil() as i32,
-        h,
-        Color::GREEN,
-    );
-}
 
-fn side_summary(side: &DuelSide) -> String {
-    format!(
-        "window {}%  precision {}%  tempo x{:.1}  lives {}",
-        (side.window * 100.0).round(),
-        (side.precision * 100.0).round(),
-        side.tempo,
-        side.lives
-    )
-}
 
-/// panneau en haut à gauche : dégâts prévus, barres des deux camps, facteurs de placement
+
+
+/// carte d'aperçu du duel : qui attaque qui, PV de la cible après le coup, dégâts selon
+/// le résultat du mini-jeu, bonus du placement et ses raisons en pastilles
 fn draw_duel_preview(
     d: &mut RaylibDrawHandle,
     assets: &Assets,
@@ -1854,164 +1909,191 @@ fn draw_duel_preview(
     let damage = |mult: f32| (c.base_damage as f32 * mult) as i32;
     let (bad, good, perfect) = (damage(0.5), damage(1.0), damage(1.5));
     let hp = defender.hp_points;
-    let (ko_text, ko_color) = if hp - bad <= 0 {
-        ("sure KO", Color::GOLD)
-    } else if hp - good <= 0 {
-        ("KO on GOOD", Color::GOLD)
-    } else if hp - perfect <= 0 {
-        ("KO on PERFECT", Color::ORANGE)
-    } else {
-        ("no KO", MUTED)
-    };
-
-    let mut lines: Vec<(String, Color)> = vec![
-        (
-            format!(
-                "{} -> {}{}",
-                attacker.name,
-                defender.name,
-                if preview.from_best_tile {
-                    "  (best tile)"
-                } else {
-                    ""
-                }
-            ),
-            Color::WHITE,
-        ),
-        (
-            format!("DMG  bad {}  good {}  perfect {}", bad, good, perfect),
-            Color::WHITE,
-        ),
-        (
-            format!(
-                "{} HP {} -> {} (good)   {}",
-                defender.name,
-                hp,
-                (hp - good).max(0),
-                ko_text
-            ),
-            ko_color,
-        ),
-    ];
-    // chances estimées (même calcul que l'IA) et avantage du placement
-    let odds = c.attacker.odds();
-    let expected = (c.base_damage as f32 * c.expected_multiplier()).round() as i32;
     let advantage = c.advantage();
-    lines.push((
-        format!(
-            "Expected ~{} dmg   odds: perfect {}%  good {}%  bad {}%",
-            expected,
-            (odds.perfect * 100.0).round(),
-            (odds.good * 100.0).round(),
-            (odds.bad * 100.0).round()
-        ),
-        Color::WHITE,
-    ));
-    lines.push((
-        format!(
-            "Placement: {}{}% damage vs no modifiers",
-            if advantage > 0 { "+" } else { "" },
-            advantage
-        ),
-        score_color(advantage),
-    ));
-    let bars_y_index = lines.len();
-    lines.push((
-        format!("You    {}", side_summary(&c.attacker)),
-        Color::WHITE,
-    ));
-    lines.push((
-        format!("Them   {}", side_summary(&c.defender)),
-        Color::WHITE,
-    ));
-    if c.factors.is_empty() {
-        lines.push((String::from("No positional modifiers"), MUTED));
-    }
-    for factor in &c.factors {
-        let (sign, color) = if factor.favors_attacker {
-            ("+ ", GOOD_FOR_ME)
-        } else {
-            ("- ", BAD_FOR_ME)
-        };
-        lines.push((format!("{}{}", sign, factor.label), color));
-    }
 
-    let font_size = 15.0 * PREVIEW_SCALE;
-    let line_height = 17.0 * PREVIEW_SCALE;
-    let mini_bar_height = 11.0 * PREVIEW_SCALE;
-    let mini_bar_width = 160.0 * PREVIEW_SCALE;
-    let pad = 8.0 * PREVIEW_SCALE;
-    // largeur calée sur la ligne la plus longue
-    let widest_line = lines
+    let width = 380.0;
+    let pad = 16.0;
+    let inner = width - pad * 2.0;
+    let chip_size = 15.0;
+    let chip_height = chip_size * 1.45 + 6.0;
+    // pastilles des facteurs, réparties sur des lignes
+    let labels: Vec<(String, Color)> = c
+        .factors
         .iter()
-        .map(|(text, _)| assets.info_font.measure_text(text, font_size, 1.0).x)
-        .fold(mini_bar_width, f32::max);
-    let width = widest_line + pad * 2.0;
-    let height = pad * 2.0 + lines.len() as f32 * line_height + 2.0 * mini_bar_height;
+        .map(|f| {
+            let color = if f.favors_attacker { ui::GOOD } else { ui::BAD };
+            let sign = if f.favors_attacker { "+" } else { "-" };
+            (format!("{sign} {}", f.label(true)), color)
+        })
+        .collect();
+    let chip_width = |text: &str| assets.info_font.measure_text(text, chip_size, 1.0).x + chip_size * 1.1;
+    // répartit les pastilles en lignes qui tiennent dans la largeur
+    let mut chip_rows: Vec<Vec<usize>> = Vec::new();
+    let mut row_width = 0.0;
+    for (i, (text, _)) in labels.iter().enumerate() {
+        let w = chip_width(text);
+        if chip_rows.is_empty() || row_width + w > inner {
+            chip_rows.push(Vec::new());
+            row_width = 0.0;
+        }
+        chip_rows.last_mut().unwrap().push(i);
+        row_width += w + 6.0;
+    }
+    let best_tile_height = if preview.from_best_tile { 20.0 } else { 0.0 };
+    let height = pad + 30.0 + best_tile_height + 10.0 + 22.0 + 16.0 + 14.0 + 52.0 + 14.0 + 30.0
+        + chip_rows.len() as f32 * chip_height
+        + pad;
+
     // côté opposé à la cible pour pas cacher le combat, sous la bannière de tour à droite
     let panel = if defender.grid_x * TILE_SIZE < SCREEN_WIDTH / 2 {
-        Rectangle::new(SCREEN_WIDTH as f32 - width - 10.0, 84.0, width, height)
+        Rectangle::new(SCREEN_WIDTH as f32 - width - 12.0, 84.0, width, height)
     } else {
-        Rectangle::new(10.0, 10.0, width, height)
+        Rectangle::new(12.0, 62.0, width, height)
     };
-    d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 225));
-    d.draw_rectangle_lines_ex(panel, 2.0 * PREVIEW_SCALE, score_color(advantage));
+    d.draw_rectangle_rounded(panel, 0.06, 8, Color::new(16, 14, 18, 236));
+    d.draw_rectangle_rounded_lines_ex(panel, 0.06, 8, 2.5, score_color(advantage));
 
     let x = panel.x + pad;
     let mut y = panel.y + pad;
-    for (i, (text, color)) in lines.iter().enumerate() {
+
+    // en-tête : attaquant  >  cible
+    let name_size = 26.0;
+    d.draw_text_ex(&assets.alert_font, attacker.class.name(), Vector2::new(x, y), name_size, 2.0, ui::CREAM);
+    let target_name = defender.class.name();
+    let target_width = assets.alert_font.measure_text(target_name, name_size, 2.0).x;
+    d.draw_text_ex(&assets.alert_font, target_name, Vector2::new(x + inner - target_width, y), name_size, 2.0, Color::new(255, 150, 140, 255));
+    draw_crossed_swords(d, Vector2::new(x + inner / 2.0, y + 11.0));
+    y += 30.0;
+    if preview.from_best_tile {
         d.draw_text_ex(
             &assets.info_font,
-            text,
+            tr("from the best tile (white frame)", "depuis la meilleure case (cadre blanc)"),
             Vector2::new(x, y),
-            font_size,
+            14.0,
             1.0,
-            *color,
+            ui::MUTED,
         );
-        y += line_height;
-        // une mini barre sous chaque ligne "You" / "Them"
-        if i == bars_y_index || i == bars_y_index + 1 {
-            let side = if i == bars_y_index {
-                &c.attacker
-            } else {
-                &c.defender
-            };
-            draw_mini_bar(d, x, y, mini_bar_width, side);
-            y += mini_bar_height;
+        y += best_tile_height;
+    }
+    y += 10.0;
+
+    // PV de la cible : ce qu'un GOOD enlève en rouge vif, le bonus d'un PERFECT plus sombre
+    let after_good = (hp - good).max(0);
+    let hp_text = trf!("HP {} > {}", hp, after_good ; "PV {} > {}", hp, after_good);
+    d.draw_text_ex(&assets.info_font, &hp_text, Vector2::new(x, y), 17.0, 1.0, Color::WHITE);
+    let ko = if hp - bad <= 0 {
+        Some((tr("SURE KO", "KO ASSURÉ"), Color::GOLD))
+    } else if hp - good <= 0 {
+        Some((tr("KO", "KO"), Color::GOLD))
+    } else if hp - perfect <= 0 {
+        Some((tr("KO if PERFECT", "KO si PARFAIT"), Color::ORANGE))
+    } else {
+        None
+    };
+    if let Some((text, color)) = ko {
+        let w = chip_width(text);
+        ui::draw_chip(d, &assets.info_font, Vector2::new(x + inner - w, y - 3.0), text, chip_size, color);
+    }
+    y += 22.0;
+    let max_hp = defender.hp_max_points.max(1) as f32;
+    let px = |value: i32| x + inner * (value.max(0) as f32 / max_hp);
+    let bar_h = 16.0;
+    d.draw_rectangle_rec(Rectangle::new(x, y, inner, bar_h), Color::new(50, 46, 44, 255));
+    // vert : ce qui reste même sur un PARFAIT. Rouge vif : ce qu'enlève un BIEN.
+    // Rouge sombre qui clignote : ce qu'un PARFAIT enlève en plus
+    d.draw_rectangle_rec(Rectangle::new(x, y, px(hp - perfect) - x, bar_h), Color::new(90, 200, 90, 255));
+    d.draw_rectangle_rec(Rectangle::new(px(hp - good), y, px(hp) - px(hp - good), bar_h), Color::new(235, 80, 60, 255));
+    let pulse = 0.5 + 0.5 * (d.get_time() as f32 * 5.0).sin();
+    d.draw_rectangle_rec(
+        Rectangle::new(px(hp - perfect), y, px(hp - good) - px(hp - perfect), bar_h),
+        Color::new((120.0 + 60.0 * pulse) as u8, 30, 30, 255),
+    );
+    d.draw_rectangle_lines_ex(Rectangle::new(x, y, inner, bar_h), 1.5, Color::new(255, 255, 255, 140));
+    y += bar_h + 14.0;
+
+    // dégâts selon le résultat du mini-jeu
+    let cell_gap = 8.0;
+    let cell_w = (inner - cell_gap * 2.0) / 3.0;
+    for (i, (label, value, color)) in [
+        (tr("BAD", "RATÉ"), bad, ui::BAD),
+        (tr("GOOD", "BIEN"), good, Color::ORANGE),
+        (tr("PERFECT", "PARFAIT"), perfect, ui::GOOD),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let cell = Rectangle::new(x + i as f32 * (cell_w + cell_gap), y, cell_w, 52.0);
+        d.draw_rectangle_rounded(cell, 0.18, 6, Color::new(32, 28, 32, 255));
+        d.draw_rectangle_rec(Rectangle::new(cell.x + 6.0, cell.y, cell.width - 12.0, 3.0), *color);
+        let label_w = assets.info_font.measure_text(label, 13.0, 1.0).x;
+        d.draw_text_ex(&assets.info_font, label, Vector2::new(cell.x + cell.width / 2.0 - label_w / 2.0, cell.y + 7.0), 13.0, 1.0, *color);
+        let number = value.to_string();
+        let number_w = assets.alert_font.measure_text(&number, 28.0, 2.0).x;
+        d.draw_text_ex(&assets.alert_font, &number, Vector2::new(cell.x + cell.width / 2.0 - number_w / 2.0, cell.y + 22.0), 28.0, 2.0, ui::CREAM);
+    }
+    y += 52.0 + 14.0;
+
+    // bonus du placement, puis ses raisons
+    let advantage_text = if advantage > 0 {
+        format!("+{advantage}%")
+    } else {
+        format!("{advantage}%")
+    };
+    d.draw_text_ex(&assets.alert_font, &advantage_text, Vector2::new(x, y), 30.0, 2.0, score_color(advantage));
+    let advantage_w = assets.alert_font.measure_text(&advantage_text, 30.0, 2.0).x;
+    let caption = if labels.is_empty() {
+        tr("no placement bonus", "aucun bonus de placement")
+    } else {
+        tr("damage from placement", "dégâts grâce au placement")
+    };
+    d.draw_text_ex(&assets.info_font, caption, Vector2::new(x + advantage_w + 10.0, y + 7.0), 15.0, 1.0, ui::MUTED);
+    y += 30.0;
+    for row in &chip_rows {
+        let mut chip_x = x;
+        for &i in row {
+            let (text, color) = &labels[i];
+            chip_x += ui::draw_chip(d, &assets.info_font, Vector2::new(chip_x, y), text, chip_size, *color) + 6.0;
         }
+        y += chip_height;
+    }
+}
+
+/// deux épées croisées (entre l'attaquant et la cible)
+fn draw_crossed_swords(d: &mut RaylibDrawHandle, center: Vector2) {
+    let blade = Color::new(220, 220, 230, 255);
+    let hilt = Color::new(200, 150, 60, 255);
+    for dir in [Vector2::new(1.0, 1.0), Vector2::new(-1.0, 1.0)] {
+        let tip = center - dir * 10.0;
+        let base = center + dir * 7.0;
+        d.draw_line_ex(tip, base, 3.0, blade);
+        let side = Vector2::new(-dir.y, dir.x) * 4.0;
+        d.draw_line_ex(base - side, base + side, 3.0, hilt);
+        d.draw_line_ex(base, base + dir * 4.0, 3.0, hilt);
     }
 }
 
 // combat : rappel des facteurs ------------------------------------------
 
+/// rappel des effets du placement pendant le duel : une pastille par effet, en bas à
+/// gauche, verte s'il aide le joueur, rouge s'il le gêne
 fn draw_combat_factors(
     d: &mut RaylibDrawHandle,
     assets: &Assets,
     conditions: &DuelConditions,
     player_is_attacker: bool,
 ) {
-    let font_size = 16.0 * PREVIEW_SCALE;
-    let line_height = 18.0 * PREVIEW_SCALE;
-    let mut y = SCREEN_HEIGHT as f32 - 20.0 - conditions.factors.len() as f32 * line_height;
+    let size = 18.0;
+    let line_height = size * 1.45 + 10.0;
+    let mut y = SCREEN_HEIGHT as f32 - 16.0 - conditions.factors.len() as f32 * line_height;
     for factor in &conditions.factors {
         let good_for_me = factor.favors_attacker == player_is_attacker;
         let (sign, color) = if good_for_me {
-            ("+ ", GOOD_FOR_ME)
+            ("+", ui::GOOD)
         } else {
-            ("- ", BAD_FOR_ME)
+            ("-", ui::BAD)
         };
-        let text = format!("{}{}", sign, factor.label);
-        let size = assets.info_font.measure_text(&text, font_size, 1.0);
-        let rect = Rectangle::new(16.0, y - 1.0, size.x + 8.0 * PREVIEW_SCALE, line_height);
-        d.draw_rectangle_rec(rect, Color::new(20, 20, 20, 190));
-        d.draw_text_ex(
-            &assets.info_font,
-            &text,
-            Vector2::new(16.0 + 4.0 * PREVIEW_SCALE, y),
-            font_size,
-            1.0,
-            color,
-        );
+        let text = format!("{sign} {}", factor.label(player_is_attacker));
+        ui::draw_chip(d, &assets.info_font, Vector2::new(16.0, y), &text, size, color);
         y += line_height;
     }
 }
@@ -2019,13 +2101,26 @@ fn draw_combat_factors(
 // illustrations des mini-jeux dans le guide ------------------------------------
 
 /// vue figée d'un mini-jeu dans un cadre, mêmes couleurs que le vrai jeu
-fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, rect: Rectangle) {
+fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: MiniGameKind, rect: Rectangle) {
     d.draw_rectangle_rec(rect, Color::new(10, 10, 10, 220));
     d.draw_rectangle_lines_ex(rect, 2.0, Color::new(255, 255, 255, 90));
     let center = Vector2::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
 
     match kind {
-        guide::Illustration::Target => {
+        MiniGameKind::Timing => {
+            let bar = Rectangle::new(rect.x + 20.0, center.y - 10.0, rect.width - 40.0, 22.0);
+            d.draw_rectangle_rec(bar, Color::DARKGRAY);
+            d.draw_rectangle_rec(Rectangle::new(bar.x + bar.width * 0.5, bar.y, bar.width * 0.22, bar.height), Color::YELLOW);
+            d.draw_rectangle_rec(Rectangle::new(bar.x + bar.width * 0.595, bar.y, bar.width * 0.03, bar.height), Color::GREEN);
+            d.draw_rectangle((bar.x + bar.width * 0.3) as i32 - 2, bar.y as i32 - 5, 4, bar.height as i32 + 10, Color::WHITE);
+            draw_guide_arrow(
+                d,
+                Vector2::new(bar.x + bar.width * 0.3 + 8.0, bar.y - 14.0),
+                Vector2::new(bar.x + bar.width * 0.48, bar.y - 14.0),
+                Color::new(255, 255, 255, 160),
+            );
+        }
+        MiniGameKind::Target => {
             // trajectoire en 8 en pointillés, la cible dessus, le viseur un peu à côté
             for i in 0..48 {
                 let t = i as f32 / 48.0 * std::f32::consts::TAU;
@@ -2049,7 +2144,7 @@ fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, 
                 d.draw_line_ex(aim + dir * 4.0, aim + dir * 15.0, 2.0, Color::WHITE);
             }
         }
-        guide::Illustration::Charge => {
+        MiniGameKind::Charge => {
             d.draw_ring(center, 22.0, 32.0, 0.0, 360.0, 48, Color::YELLOW);
             d.draw_ring(center, 26.0, 28.0, 0.0, 360.0, 48, Color::GREEN);
             d.draw_circle_v(center, 4.0, Color::WHITE);
@@ -2061,7 +2156,7 @@ fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, 
                 draw_guide_arrow(d, from, to, Color::new(255, 255, 255, 160));
             }
         }
-        guide::Illustration::Sequence => {
+        MiniGameKind::Sequence => {
             let size = 46.0;
             let gap = 10.0;
             let total = size * 4.0 + gap * 3.0;
@@ -2092,7 +2187,7 @@ fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, 
                 0.55,
             );
         }
-        guide::Illustration::Runes => {
+        MiniGameKind::Runes => {
             let colors = [
                 Color::new(170, 100, 255, 255),
                 Color::new(60, 200, 255, 255),
@@ -2143,7 +2238,7 @@ fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, 
                 0.25,
             );
         }
-        guide::Illustration::Channel => {
+        MiniGameKind::Channel => {
             // aura qui dérive (traînée), curseur dans le cœur, jauge de concentration
             for i in 0..5 {
                 let p = Vector2::new(
@@ -2188,7 +2283,7 @@ fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, 
                 Color::WHITE,
             );
         }
-        guide::Illustration::Heartbeat => {
+        MiniGameKind::Heartbeat => {
             let track = Rectangle::new(rect.x + 14.0, rect.y + 58.0, rect.width - 28.0, 28.0);
             let line_x = track.x + 50.0;
             // cœur au-dessus de la ligne de frappe
@@ -2226,7 +2321,8 @@ fn draw_guide_illustration(d: &mut impl RaylibDraw, kind: &guide::Illustration, 
                 Color::WHITE,
             );
             let drop_y = track.y + track.height / 2.0;
-            for drop_x in [line_x + 70.0, line_x + 145.0, line_x + 220.0] {
+            let spacing = (track.x + track.width - 20.0 - line_x) / 3.0;
+            for drop_x in [line_x + spacing, line_x + spacing * 2.0, line_x + spacing * 3.0] {
                 d.draw_circle_v(
                     Vector2::new(drop_x, drop_y),
                     9.0,
@@ -2279,4 +2375,409 @@ fn draw_guide_arrow(d: &mut impl RaylibDraw, from: Vector2, to: Vector2, color: 
     // raylib ne dessine un triangle que dans le sens antihoraire : on essaie les deux
     d.draw_triangle(to, left, right, color);
     d.draw_triangle(to, right, left, color);
+}
+
+// Settings screen -----------------------------------------------------------------
+
+pub fn draw_settings_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &Assets,
+    hud: &HudRects,
+    mouse_position: Vector2,
+    capturing: Option<Bind>,
+) {
+    use crate::screens::settings as layout;
+    draw_fullscreen_texture(d, &assets.menu_background_texture);
+    d.draw_rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Color::new(0, 0, 0, 90));
+    ui::draw_title(d, &assets.hud_font, tr("Settings", "Réglages"), SCREEN_WIDTH as f32 / 2.0, 20.0, 46.0);
+    let current = settings::get();
+
+    // général ----------------------------------------------------------------------
+    ui::draw_panel(d, layout::GENERAL);
+    draw_card_title(d, assets, &tr("General", "Général").to_uppercase(), Vector2::new(layout::GENERAL.x + 28.0, layout::GENERAL.y + 18.0), 30.0);
+    for (i, toggle) in layout::toggles(&current).iter().enumerate() {
+        let pos = layout::toggle_title_pos(i);
+        d.draw_text_ex(&assets.info_font, toggle.title, pos, 20.0, 1.0, Color::WHITE);
+        d.draw_text_ex(&assets.info_font, toggle.detail, pos + Vector2::new(0.0, 25.0), 15.0, 1.0, ui::MUTED);
+        ui::draw_segmented(d, &assets.info_font, layout::toggle_rect(i), &toggle.options, toggle.active, mouse_position);
+    }
+
+    // touches ----------------------------------------------------------------------
+    let panel = layout::CONTROLS;
+    ui::draw_panel(d, panel);
+    draw_card_title(d, assets, &tr("Controls", "Touches").to_uppercase(), Vector2::new(panel.x + 28.0, panel.y + 18.0), 30.0);
+    ui::draw_button(d, assets, layout::reset_rect(), tr("Default keys", "Par défaut"), Skin::Wood, mouse_position, capturing.is_none());
+
+    let label_x = panel.x + 28.0;
+    let heading = |d: &mut RaylibDrawHandle, text: &str, y: f32| {
+        d.draw_text_ex(&assets.alert_font, text, Vector2::new(label_x, y), 22.0, 2.0, ui::GOLD);
+        d.draw_rectangle(label_x as i32, (y + 24.0) as i32, (panel.width - 56.0) as i32, 1, Color::new(240, 196, 70, 90));
+    };
+    heading(d, &tr("On the map", "Sur la carte").to_uppercase(), layout::map_heading_y());
+    // touches fixes, grisées
+    let fixed_y = layout::key_rows()[0].1 - 2.0 * layout::KEY_ROW;
+    for (i, (label, key)) in [
+        (tr("Select, move, attack", "Choisir, bouger, attaquer"), tr("Left click", "Clic gauche")),
+        (tr("Pause / back", "Pause / retour"), tr("Esc", "Échap")),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let y = fixed_y + i as f32 * layout::KEY_ROW;
+        d.draw_text_ex(&assets.info_font, label, Vector2::new(label_x, y + 3.0), 16.0, 1.0, ui::MUTED);
+        let rect = layout::key_rect(y);
+        let width = assets.info_font.measure_text(key, 14.0, 1.0).x;
+        d.draw_text_ex(&assets.info_font, key, Vector2::new(rect.x + rect.width / 2.0 - width / 2.0, y + 4.0), 14.0, 1.0, ui::MUTED);
+    }
+    heading(d, &tr("In duels", "En duel").to_uppercase(), layout::duel_heading_y());
+    d.draw_text_ex(
+        &assets.info_font,
+        tr("Mouse click and arrow keys always work too.", "Le clic et les flèches marchent toujours aussi."),
+        Vector2::new(label_x, layout::duel_heading_y() + layout::KEY_ROW + 4.0),
+        14.0,
+        1.0,
+        ui::MUTED,
+    );
+    let blink = (d.get_time() * 3.0) as i32 % 2 == 0;
+    for (bind, y) in layout::key_rows() {
+        d.draw_text_ex(&assets.info_font, bind.label(), Vector2::new(label_x, y + 3.0), 16.0, 1.0, Color::WHITE);
+        let rect = layout::key_rect(y);
+        let hovered = capturing.is_none() && rect.check_collision_point_rec(mouse_position);
+        if capturing == Some(bind) {
+            d.draw_rectangle_rounded(rect, 0.3, 6, Color::new(92, 70, 28, 240));
+            d.draw_rectangle_rounded_lines_ex(rect, 0.3, 6, 2.0, if blink { ui::GOLD } else { ui::CREAM });
+            let text = tr("Press a key...", "Appuie sur une touche...");
+            let width = assets.info_font.measure_text(text, 13.0, 1.0).x;
+            d.draw_text_ex(&assets.info_font, text, Vector2::new(rect.x + rect.width / 2.0 - width / 2.0, rect.y + 5.0), 13.0, 1.0, Color::WHITE);
+        } else {
+            if hovered {
+                d.draw_rectangle_rounded(rect, 0.3, 6, Color::new(255, 230, 170, 30));
+            }
+            let name = settings::key_name(current.key(bind));
+            let width = assets.info_font.measure_text(&name, 14.0, 1.0).x + 14.0;
+            ui::draw_keycap(d, &assets.info_font, Vector2::new(rect.x + rect.width / 2.0 - width / 2.0, rect.y), &name, 14.0);
+        }
+    }
+
+    ui::draw_button(d, assets, hud.btn_guide_back, tr("Back", "Retour"), Skin::Wood, mouse_position, true);
+    draw_cursor(d, assets, mouse_position);
+}
+
+// Practice screen -----------------------------------------------------------------
+
+pub fn draw_practice_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &mut Assets,
+    delta_time: f32,
+    hud: &HudRects,
+    mouse_position: Vector2,
+    practice: &Practice,
+) {
+    match &practice.phase {
+        PracticePhase::Setup => draw_practice_setup(d, assets, delta_time, hud, mouse_position, practice),
+        PracticePhase::Playing { minigame, .. } => {
+            draw_practice_duel(d, assets, delta_time, practice);
+            minigame.draw(d, assets);
+            let hint = tr("Esc: stop", "Échap : arrêter");
+            d.draw_text_ex(&assets.info_font, hint, Vector2::new(SCREEN_WIDTH as f32 - 170.0, 16.0), 16.0, 1.0, Color::new(255, 255, 255, 180));
+        }
+        PracticePhase::Result { result } => {
+            draw_practice_duel(d, assets, delta_time, practice);
+            draw_practice_result(d, assets, mouse_position, practice, *result);
+        }
+    }
+    draw_cursor(d, assets, mouse_position);
+}
+
+fn draw_practice_setup(
+    d: &mut RaylibDrawHandle,
+    assets: &mut Assets,
+    delta_time: f32,
+    hud: &HudRects,
+    mouse: Vector2,
+    practice: &Practice,
+) {
+    draw_fullscreen_texture(d, &assets.menu_background_texture);
+    d.draw_rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Color::new(0, 0, 0, 100));
+    ui::draw_title(d, &assets.hud_font, tr("Training ground", "Terrain d'entraînement"), SCREEN_WIDTH as f32 / 2.0, 16.0, 44.0);
+    let assets = &*assets;
+    let left = practice::LEFT;
+
+    // 1. l'unité ------------------------------------------------------------------
+    ui::draw_panel(d, left);
+    let heading = |d: &mut RaylibDrawHandle, text: &str, y: f32| {
+        draw_card_title(d, assets, text, Vector2::new(left.x + 22.0, y), 24.0);
+    };
+    heading(d, &trf!("1  Your unit: {}", practice.class.name() ; "1  Ton unité : {}", practice.class.name()).to_uppercase(), left.y + 16.0);
+    for (i, class) in practice::all_classes().enumerate() {
+        let rect = practice::class_rect(i);
+        let selected = class == practice.class;
+        let hovered = rect.check_collision_point_rec(mouse);
+        d.draw_rectangle_rounded(rect, 0.12, 6, if selected { Color::new(92, 70, 28, 240) } else { Color::new(30, 28, 34, 240) });
+        let border = if selected {
+            ui::GOLD
+        } else if hovered {
+            ui::CREAM
+        } else {
+            ui::PANEL_LINE
+        };
+        d.draw_rectangle_rounded_lines_ex(rect, 0.12, 6, if selected { 3.0 } else { 1.5 }, border);
+        let sprite = Rectangle::new(rect.x + 8.0, rect.y + 6.0, rect.width - 16.0, rect.height - 12.0);
+        draw_class_portrait(d, assets, class, sprite, false);
+    }
+
+    // 2. le rôle -------------------------------------------------------------------
+    heading(d, &tr("2  Role", "2  Rôle").to_uppercase(), left.y + 238.0);
+    let role_index = (practice.role == Role::Defend) as usize;
+    ui::draw_segmented(
+        d,
+        &assets.info_font,
+        practice::role_rect(),
+        &[tr("I attack", "J'attaque"), tr("I defend", "Je défends")],
+        role_index,
+        mouse,
+    );
+    let role_text = match practice.role {
+        Role::Attack => tr("Your mini-game sets the damage you deal.", "Ton mini-jeu décide des dégâts infligés."),
+        Role::Defend => tr("Your mini-game is a parry: less damage taken.", "Ton mini-jeu est une parade : moins de dégâts subis."),
+    };
+    ui::draw_wrapped(d, &assets.info_font, role_text, Vector2::new(practice::role_rect().x + 336.0, practice::role_rect().y - 2.0), 180.0, 14.0, ui::MUTED);
+
+    // 3. le placement --------------------------------------------------------------
+    heading(d, &tr("3  Placement", "3  Placement").to_uppercase(), left.y + 326.0);
+    let hint = tr("click a tile: ally > enemy > empty", "clic : allié > ennemi > vide");
+    let hint_width = assets.info_font.measure_text(hint, 14.0, 1.0).x;
+    d.draw_text_ex(&assets.info_font, hint, Vector2::new(left.x + left.width - 22.0 - hint_width, left.y + 332.0), 14.0, 1.0, ui::MUTED);
+    let (attacker_class, defender_class) = practice.duel_classes();
+    let attacker_tile = practice.attacker_tile();
+    let target_tile = practice.target_tile();
+    for y in 0..practice::BOARD_ROWS {
+        for x in 0..practice::BOARD_COLS {
+            let rect = practice::cell_rect(x, y);
+            let shade = if (x + y) % 2 == 0 { Color::new(74, 100, 62, 255) } else { Color::new(66, 90, 56, 255) };
+            d.draw_rectangle_rec(rect, shade);
+            d.draw_rectangle_lines_ex(rect, 1.0, Color::new(0, 0, 0, 80));
+            let tile = (x as i32, y as i32);
+            let free = tile != attacker_tile && tile != target_tile;
+            if free && rect.check_collision_point_rec(mouse) {
+                d.draw_rectangle_rec(rect, Color::new(255, 255, 255, 40));
+            }
+            match practice.board[y][x] {
+                Cell::Ally => draw_token(d, rect, TOKEN_BLUE, false),
+                Cell::Enemy => draw_token(d, rect, TOKEN_RED, false),
+                Cell::Empty => {}
+            }
+        }
+    }
+    // l'attaquant (à gauche) et la cible, en sprites. Le joueur a un anneau doré
+    let me_attacking = practice.role == Role::Attack;
+    for (class, tile, flip, mine) in [
+        (attacker_class, attacker_tile, false, me_attacking),
+        (defender_class, target_tile, true, !me_attacking),
+    ] {
+        let cell = practice::cell_rect(tile.0 as usize, tile.1 as usize);
+        let mine_faction = class.faction() == practice.class.faction();
+        d.draw_rectangle_rec(cell, if mine_faction { Color::new(70, 130, 255, 90) } else { Color::new(220, 60, 60, 90) });
+        if mine {
+            d.draw_rectangle_lines_ex(cell, 3.0, ui::GOLD);
+        }
+        let sprite = Rectangle::new(cell.x - 6.0, cell.y - 18.0, cell.width + 12.0, cell.height + 14.0);
+        draw_class_portrait(d, assets, class, sprite, flip);
+    }
+    // options à droite du plateau
+    let options = [
+        (practice.range_allowed().then_some(tr("Shoot from range", "Tirer de loin")), practice.at_range),
+        (Some(tr("Me: low HP", "Moi : PV bas")), practice.me_low),
+        (Some(tr("Them: low HP", "Lui : PV bas")), practice.them_low),
+    ];
+    for (i, (label, checked)) in options.iter().enumerate() {
+        let Some(label) = label else {
+            continue;
+        };
+        let rect = practice::option_rect(i);
+        let hovered = rect.check_collision_point_rec(mouse);
+        let boxed = Rectangle::new(rect.x, rect.y + 9.0, 22.0, 22.0);
+        d.draw_rectangle_rounded(boxed, 0.25, 4, if *checked { Color::new(92, 70, 28, 255) } else { Color::new(30, 28, 34, 255) });
+        d.draw_rectangle_rounded_lines_ex(boxed, 0.25, 4, 2.0, if *checked || hovered { ui::GOLD } else { ui::PANEL_LINE });
+        if *checked {
+            d.draw_line_ex(Vector2::new(boxed.x + 5.0, boxed.y + 11.0), Vector2::new(boxed.x + 10.0, boxed.y + 17.0), 3.0, ui::CREAM);
+            d.draw_line_ex(Vector2::new(boxed.x + 10.0, boxed.y + 17.0), Vector2::new(boxed.x + 18.0, boxed.y + 5.0), 3.0, ui::CREAM);
+        }
+        d.draw_text_ex(&assets.info_font, label, Vector2::new(rect.x + 32.0, rect.y + 11.0), 16.0, 1.0, Color::WHITE);
+    }
+    ui::draw_button(d, assets, practice::option_rect(3), tr("Clear", "Vider"), Skin::Wood, mouse, true);
+
+    // à droite : le mini-jeu, la barre obtenue et pourquoi ----------------------------
+    let right = practice::RIGHT;
+    ui::draw_panel(d, right);
+    let kind = practice.kind();
+    draw_card_title(d, assets, &kind.name().to_uppercase(), Vector2::new(right.x + 24.0, right.y + 18.0), 38.0);
+    for (j, line) in kind.rule().iter().enumerate() {
+        d.draw_text_ex(&assets.info_font, line, Vector2::new(right.x + 24.0, right.y + 66.0 + j as f32 * 21.0), 17.0, 1.0, Color::WHITE);
+    }
+    draw_guide_illustration(d, kind, Rectangle::new(right.x + right.width - 274.0, right.y + 16.0, 250.0, 96.0));
+
+    let side = practice.my_side();
+    let base = DuelSide::base();
+    draw_card_title(d, assets, &tr("Your bar", "Ta barre").to_uppercase(), Vector2::new(right.x + 24.0, right.y + 132.0), 24.0);
+    // grande barre d'exemple, zones centrées, vies en carrés rouges à gauche
+    let bar = Rectangle::new(right.x + 70.0, right.y + 172.0, right.width - 94.0, 26.0);
+    d.draw_rectangle_rec(bar, Color::DARKGRAY);
+    d.draw_rectangle_rec(Rectangle::new(bar.x + bar.width * (0.5 - side.window / 2.0), bar.y, bar.width * side.window, bar.height), Color::YELLOW);
+    if side.precision > 0.0 {
+        let w = (bar.width * side.precision).max(2.0);
+        d.draw_rectangle_rec(Rectangle::new(bar.x + bar.width / 2.0 - w / 2.0, bar.y, w, bar.height), Color::GREEN);
+    }
+    // repère de la barre de base, pour voir ce qui a changé
+    for edge in [0.5 - base.window / 2.0, 0.5 + base.window / 2.0] {
+        d.draw_rectangle((bar.x + bar.width * edge) as i32 - 1, bar.y as i32 - 6, 2, bar.height as i32 + 12, Color::new(255, 255, 255, 150));
+    }
+    for i in 0..side.lives {
+        d.draw_rectangle((bar.x - 22.0 - i as f32 * 18.0) as i32, (bar.y + 6.0) as i32, 14, 14, Color::RED);
+    }
+    let pct = |v: f32| (v * 100.0).round() as i32;
+    let delta_color = |delta: i32| match delta {
+        x if x > 0 => ui::GOOD,
+        x if x < 0 => ui::BAD,
+        _ => ui::CREAM,
+    };
+    let window_delta = pct(side.window) - pct(base.window);
+    let precision_delta = pct(side.precision) - pct(base.precision);
+    // tempo : plus bas = plus calme = mieux
+    let tempo_delta = -((side.tempo - 1.0) * 100.0).round() as i32;
+    let stats = [
+        (trf!("Yellow {}%", pct(side.window) ; "Jaune {}%", pct(side.window)), delta_color(window_delta)),
+        (trf!("Green {}%", pct(side.precision) ; "Vert {}%", pct(side.precision)), delta_color(precision_delta)),
+        (trf!("Speed x{:.1}", side.tempo ; "Vitesse x{:.1}", side.tempo), delta_color(tempo_delta)),
+        (trf!("Lives {}", side.lives ; "Vies {}", side.lives), delta_color(side.lives as i32)),
+    ];
+    let mut chip_x = right.x + 24.0;
+    for (text, color) in &stats {
+        chip_x += ui::draw_chip(d, &assets.info_font, Vector2::new(chip_x, right.y + 214.0), text, 15.0, *color) + 8.0;
+    }
+
+    draw_card_title(d, assets, &tr("Effects", "Effets").to_uppercase(), Vector2::new(right.x + 24.0, right.y + 262.0), 24.0);
+    let conditions = practice.conditions();
+    let mut y = right.y + 298.0;
+    if conditions.factors.is_empty() {
+        ui::draw_wrapped(
+            d,
+            &assets.info_font,
+            tr(
+                "None yet. Place allies (blue) or enemies (red) around the duel, or try low HP.",
+                "Aucun pour l'instant. Place des alliés (bleu) ou des ennemis (rouge) autour du duel, ou essaie les PV bas.",
+            ),
+            Vector2::new(right.x + 24.0, y),
+            right.width - 48.0,
+            16.0,
+            ui::MUTED,
+        );
+    }
+    for factor in &conditions.factors {
+        let good = factor.favors_attacker == me_attacking;
+        let (sign, color) = if good { ("+", ui::GOOD) } else { ("-", ui::BAD) };
+        let label = format!("{sign} {}", factor.label(me_attacking));
+        let width = ui::draw_chip(d, &assets.info_font, Vector2::new(right.x + 24.0, y), &label, 15.0, color);
+        d.draw_text_ex(&assets.info_font, &factor.effect(), Vector2::new(right.x + 34.0 + width, y + 4.0), 14.0, 1.0, ui::MUTED);
+        y += 30.0;
+    }
+
+    // stats et bouton Jouer
+    let stats_text = trf!(
+        "Tries {}   PERFECT {}   Streak {} (best {})", practice.tries, practice.perfects, practice.streak, practice.best_streak ;
+        "Essais {}   PARFAIT {}   Série {} (record {})", practice.tries, practice.perfects, practice.streak, practice.best_streak
+    );
+    let stats_width = assets.info_font.measure_text(&stats_text, 15.0, 1.0).x;
+    d.draw_text_ex(&assets.info_font, &stats_text, Vector2::new(right.x + right.width / 2.0 - stats_width / 2.0, practice::play_rect().y - 30.0), 15.0, 1.0, ui::CREAM);
+    ui::draw_button(d, assets, practice::play_rect(), tr("Play", "Jouer"), Skin::Wood, mouse, true);
+    let key = settings::key_name(settings::key(Bind::Action));
+    let or_text = tr("or", "ou");
+    let or_width = assets.info_font.measure_text(or_text, 14.0, 1.0).x;
+    let keycap_width = assets.info_font.measure_text(&key, 14.0, 1.0).x + 14.0;
+    let total = or_width + 8.0 + keycap_width.max(22.4);
+    let hint_x = right.x + right.width / 2.0 - total / 2.0;
+    let hint_y = practice::play_rect().y + practice::play_rect().height + 6.0;
+    d.draw_text_ex(&assets.info_font, or_text, Vector2::new(hint_x, hint_y + 3.0), 14.0, 1.0, ui::MUTED);
+    ui::draw_keycap(d, &assets.info_font, Vector2::new(hint_x + or_width + 8.0, hint_y), &key, 14.0);
+
+    ui::draw_button(d, assets, hud.btn_guide_back, tr("Guide", "Guide"), Skin::Wood, mouse, true);
+    let _ = delta_time;
+}
+
+/// l'essai en cours : fond de combat, mon unité à gauche, l'adversaire à droite
+fn draw_practice_duel(d: &mut RaylibDrawHandle, assets: &mut Assets, delta_time: f32, practice: &Practice) {
+    draw_fullscreen_texture(d, &assets.combat_screen_background_texture);
+    let (attacker_class, defender_class) = practice.duel_classes();
+    let me_attacking = practice.role == Role::Attack;
+    let (mine, theirs) = if me_attacking {
+        (attacker_class, defender_class)
+    } else {
+        (defender_class, attacker_class)
+    };
+    // mêmes tailles et places que l'écran de combat
+    let size = 500.0;
+    let top = SCREEN_HEIGHT as f32 / 2.0 - size / 2.0;
+    let center = SCREEN_WIDTH as f32 / 2.0;
+    draw_idle_facing(d, &mut assets.animation_set_mut(mine).idle, center - size + 185.0, top, size, delta_time, false);
+    draw_idle_facing(d, &mut assets.animation_set_mut(theirs).idle, center - 185.0, top, size, delta_time, true);
+    let assets = &*assets;
+    let role = if me_attacking { tr("attacks", "attaque") } else { tr("defends", "défend") };
+    let title = format!("{} {}", mine.name(), role);
+    let width = assets.alert_font.measure_text(&title, 32.0, 2.0).x;
+    d.draw_text_ex(&assets.alert_font, &title, Vector2::new(SCREEN_WIDTH as f32 / 2.0 - width / 2.0 + 2.0, 22.0), 32.0, 2.0, Color::new(0, 0, 0, 160));
+    d.draw_text_ex(&assets.alert_font, &title, Vector2::new(SCREEN_WIDTH as f32 / 2.0 - width / 2.0, 20.0), 32.0, 2.0, Color::WHITE);
+    draw_combat_factors(d, assets, &practice.conditions(), me_attacking);
+}
+
+fn draw_practice_result(d: &mut RaylibDrawHandle, assets: &Assets, mouse: Vector2, practice: &Practice, result: TimingResult) {
+    let me_attacking = practice.role == Role::Attack;
+    let (word, color) = match result {
+        TimingResult::Bad => (tr("BAD", "RATÉ"), ui::BAD),
+        TimingResult::Good => (tr("GOOD", "BIEN"), Color::ORANGE),
+        TimingResult::Perfect => (tr("PERFECT!", "PARFAIT !"), ui::GOOD),
+    };
+    let multiplier = result.to_multiplier(me_attacking);
+    let detail = if me_attacking {
+        trf!("damage dealt x{}", multiplier ; "dégâts infligés x{}", multiplier)
+    } else {
+        trf!("damage taken x{}", multiplier ; "dégâts subis x{}", multiplier)
+    };
+    let band = Rectangle::new(0.0, 160.0, SCREEN_WIDTH as f32, 250.0);
+    d.draw_rectangle_rec(band, Color::new(0, 0, 0, 170));
+    let width = assets.alert_font.measure_text(word, 84.0, 2.0).x;
+    d.draw_text_ex(&assets.alert_font, word, Vector2::new(SCREEN_WIDTH as f32 / 2.0 - width / 2.0, 176.0), 84.0, 2.0, color);
+    let mut line = detail;
+    if practice.streak >= 2 {
+        line += &trf!("   ·   PERFECT streak: {}", practice.streak ; "   ·   série PARFAITE : {}", practice.streak);
+    }
+    let width = assets.info_font.measure_text(&line, 20.0, 1.0).x;
+    d.draw_text_ex(&assets.info_font, &line, Vector2::new(SCREEN_WIDTH as f32 / 2.0 - width / 2.0, 272.0), 20.0, 1.0, ui::CREAM);
+    ui::draw_button(d, assets, practice::again_rect(), tr("Again", "Rejouer"), Skin::Wood, mouse, true);
+    ui::draw_button(d, assets, practice::setup_rect(), tr("Change setup", "Modifier"), Skin::Wood, mouse, true);
+}
+
+/// sprite idle animé dans un carré de `size` (comme l'écran de combat), tourné vers la
+/// gauche si `flip`
+fn draw_idle_facing(
+    d: &mut RaylibDrawHandle,
+    animation: &mut Animation,
+    x: f32,
+    top_y: f32,
+    size: f32,
+    delta_time: f32,
+    flip: bool,
+) {
+    animation.animation_update(delta_time);
+    let mut frame = animation.animation_frame();
+    if flip {
+        frame.width = -frame.width;
+    }
+    d.draw_texture_pro(
+        &animation.texture,
+        frame,
+        Rectangle::new(x, top_y, size, size),
+        Vector2::zero(),
+        0.0,
+        Color::WHITE,
+    );
 }

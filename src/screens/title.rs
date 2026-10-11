@@ -27,12 +27,11 @@ pub fn update(
         *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_settings_title_screen) {
-        // TODO: écran settings
+        crate::screens::settings::open(game, GameMode::TitleScreen);
+        *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_learn_title_screen) {
-        game.guide_return_to = GameMode::TitleScreen;
-        game.game_mode = GameMode::GuideScreen;
-        game.guide_scroll = 0.0;
+        crate::screens::guide::open(game, GameMode::TitleScreen);
         *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_play_title_screen) {

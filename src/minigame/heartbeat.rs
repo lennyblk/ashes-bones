@@ -91,7 +91,7 @@ impl Heartbeat {
             }
         }
 
-        if rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+        if crate::input::duel_action_pressed(rl) {
             // le clic vise le prochain battement pas encore joué
             let next = self.beats.iter().position(|b| *b == Beat::Waiting)?;
             let offset = self.time - self.beat_time(next);

@@ -8,6 +8,8 @@ mod assets;
 mod combat;
 mod command;
 mod cursor;
+#[cfg(debug_assertions)]
+mod devshots;
 mod duel;
 mod game;
 mod game_mode;
@@ -19,6 +21,7 @@ mod movement;
 mod network;
 mod render;
 mod screens;
+mod settings;
 mod turn;
 mod ui;
 mod unit;
@@ -31,6 +34,7 @@ use cursor::{CursorType, Cursors};
 use game::Game;
 use game_mode::{GameMode, TurnPhase};
 use network::{Announcer, Browser, Connection, Event, GameInfo, Message};
+use settings::tr;
 use screens::host::HostAction;
 use screens::multiplayer::LobbyAction;
 use unit::Faction;
@@ -77,6 +81,8 @@ fn main() {
     }
     // nouvelle release sur GitHub ? Téléchargée et installée en arrière-plan
     let update_status = updater::start();
+    // langue, touches... de la dernière fois
+    settings::load();
 
     // init window
     let (mut rl, thread) = raylib::init()
@@ -129,16 +135,27 @@ fn main() {
     // invité connecté, en attente du START de l'hôte (début de partie)
     let mut awaiting_start = false;
 
+    // visite de vérification de l'affichage (version de dev, ASHES_SHOTS=1)
+    #[cfg(debug_assertions)]
+    let mut tour = devshots::active().then(devshots::Tour::new);
+
     // run window --------------------------------------------------------------
     while !rl.window_should_close() {
+        #[cfg(debug_assertions)]
+        if let Some(tour) = &mut tour {
+            tour.before_frame(&mut game, &mut rl);
+        }
         let delta_time = rl.get_frame_time();
         // mise à jour en arrière-plan : son avancement s'affiche sur l'écran titre
         if let Some(status) = update_status.as_ref().and_then(|rx| rx.try_recv().ok()) {
             game.update_notice = Some(match status {
-                UpdateStatus::Downloading(version) => format!("Downloading update v{version}..."),
-                UpdateStatus::Installed(version) => {
-                    format!("Update v{version} installed: restart the game to play it")
+                UpdateStatus::Downloading(version) => {
+                    trf!("Downloading update v{}...", version ; "Téléchargement de la mise à jour v{}...", version)
                 }
+                UpdateStatus::Installed(version) => trf!(
+                    "Update v{} installed: restart the game to play it", version ;
+                    "Mise à jour v{} installée : relance le jeu pour en profiter", version
+                ),
             });
         }
         // temps accéléré pour la grille seulement (bouton x2), le combat garde le vrai temps
@@ -149,10 +166,14 @@ fn main() {
         };
 
         let mouse_position = rl.get_mouse_position();
-        // en pause ou dans le guide, la partie est gelée : ni mouvement ni animation
+        // en pause, dans le guide, les réglages ou l'entraînement, la partie est gelée :
+        // ni mouvement ni animation
         if !matches!(
             game.game_mode,
-            game_mode::GameMode::PauseScreen | game_mode::GameMode::GuideScreen
+            GameMode::PauseScreen
+                | GameMode::GuideScreen
+                | GameMode::SettingsScreen
+                | GameMode::PracticeScreen
         ) {
             for unit in game.units.iter_mut() {
                 unit.update_position(grid_dt);
@@ -161,6 +182,21 @@ fn main() {
         }
 
         let mut click_consumed = false;
+
+        // solo : en pause ou dans le guide, le combat est gelé (mini-jeu compris). Aussi la
+        // frame où l'on en sort : le clic sur Play ne doit pas compter dans le mini-jeu.
+        // En ligne rien ne s'arrête, personne ne peut geler la partie de l'autre
+        let paused = |game: &Game| {
+            !game.online
+                && matches!(
+                    game.game_mode,
+                    GameMode::PauseScreen
+                        | GameMode::GuideScreen
+                        | GameMode::SettingsScreen
+                        | GameMode::PracticeScreen
+                )
+        };
+        let paused_at_frame_start = paused(&game);
 
         screens::pause::handle_escape(&mut game, &rl);
 
@@ -216,7 +252,7 @@ fn main() {
             }
             Some(Err(_)) => {
                 joining = None;
-                game.lobby_error = Some("Could not join this game");
+                game.lobby_error = Some(tr("Could not join this game", "Impossible de rejoindre cette partie"));
             }
             None => {}
         }
@@ -250,8 +286,10 @@ fn main() {
                         announcer = Some(new_announcer);
                     }
                     _ => {
-                        game.host_form.error =
-                            Some("Port 6666 busy: is a game already hosted on this PC?")
+                        game.host_form.error = Some(tr(
+                            "Port 6666 busy: is a game already hosted on this PC?",
+                            "Port 6666 occupé : une partie est déjà hébergée sur ce PC ?",
+                        ))
                     }
                 }
             }
@@ -277,7 +315,7 @@ fn main() {
             }
             Some(Err(_)) => {
                 host_listener = None;
-                game.host_form.error = Some("Connection failed, try again");
+                game.host_form.error = Some(tr("Connection failed, try again", "Échec de la connexion, réessaie"));
             }
             None => {}
         }
@@ -285,10 +323,19 @@ fn main() {
         if game.game_mode != GameMode::HostScreen {
             host_listener = None;
         }
-        if screens::pause::update(&mut game, &rl, &hud, mouse_position) {
+        if screens::pause::update(&mut game, &rl, &hud, mouse_position, &mut click_consumed) {
             break;
         }
-        screens::guide::update(&mut game, &rl, &hud, mouse_position);
+        screens::guide::update(&mut game, &rl, &hud, mouse_position, &mut click_consumed);
+        screens::settings::update(&mut game, &mut rl, &hud, mouse_position, click_consumed);
+        screens::practice::update(
+            &mut game,
+            &rl,
+            &hud,
+            mouse_position,
+            click_consumed,
+            delta_time,
+        );
         screens::faction_selection::update(&mut game, &rl, mouse_position, click_consumed);
         if screens::game_over::update(&mut game, &rl, &hud, mouse_position, &mut click_consumed) {
             break;
@@ -305,7 +352,12 @@ fn main() {
         let wait_button_visible =
             player_can_act && game.selected_unit.is_some_and(|i| game.units[i].can_wait());
         if wait_button_visible
-            && input::is_button_clicked(mouse_position, input::mouse_is_clicked(&rl), hud.btn_wait)
+            && (input::wait_pressed(&rl)
+                || input::is_button_clicked(
+                    mouse_position,
+                    input::mouse_is_clicked(&rl),
+                    hud.btn_wait,
+                ))
         {
             if let Some(sel) = game.selected_unit {
                 play(&mut game, connection.as_ref(), Command::Wait { unit: sel });
@@ -328,11 +380,12 @@ fn main() {
         }
 
         // fin de tour : bouton end turn, ou auto quand tous les persos ont fini
-        let end_turn_clicked = input::is_button_clicked(
-            mouse_position,
-            input::mouse_is_clicked(&rl),
-            hud.btn_end_turn,
-        );
+        let end_turn_clicked = input::end_turn_pressed(&rl)
+            || input::is_button_clicked(
+                mouse_position,
+                input::mouse_is_clicked(&rl),
+                hud.btn_end_turn,
+            );
 
         let enemy_snapshot: Vec<Unit> = game
             .units
@@ -374,7 +427,7 @@ fn main() {
                             incoming.clear();
                             if !apply_start(&mut game, host_faction, &positions) {
                                 game.reset(&rl, GameMode::TitleScreen);
-                                game.title_notice = Some("Invalid data from opponent");
+                                game.title_notice = Some(tr("Invalid data from opponent", "Données invalides reçues de l'adversaire"));
                             }
                         }
                     }
@@ -391,7 +444,7 @@ fn main() {
         }
         if opponent_left {
             game.reset(&rl, GameMode::TitleScreen);
-            game.title_notice = Some("Your opponent disconnected");
+            game.title_notice = Some(tr("Your opponent disconnected", "Ton adversaire s'est déconnecté"));
         }
         // revanche : ma demande part une seule fois. Quand les deux l'ont demandée, l'hôte
         // tire une nouvelle partie et l'envoie (l'invité l'applique en recevant START)
@@ -416,15 +469,16 @@ fn main() {
             // invisible sur le réseau = personne ne pourra rejoindre : inutile d'attendre
             if announcer.tick().is_err() && host_listener.is_some() {
                 host_listener = None;
-                game.host_form.error = Some(
+                game.host_form.error = Some(tr(
                     "Can't reach the local network (macOS: allow Local Network, then restart)",
-                );
+                    "Réseau local injoignable (macOS : autorise Réseau local, puis redémarre)",
+                ));
             }
         }
         if connection.is_some() && game.game_mode == GameMode::TitleScreen {
             // pas d'écrasement de « Your opponent disconnected » quand c'est lui qui est parti
             if game.title_notice.is_none() {
-                game.title_notice = Some("You left the game");
+                game.title_notice = Some(tr("You left the game", "Tu as quitté la partie"));
             }
             connection = None;
             incoming.clear();
@@ -439,14 +493,16 @@ fn main() {
                     command::apply(&mut game, command);
                 } else {
                     game.reset(&rl, GameMode::TitleScreen);
-                    game.title_notice = Some("Invalid data from opponent");
+                    game.title_notice = Some(tr("Invalid data from opponent", "Données invalides reçues de l'adversaire"));
                 }
             }
         }
 
         turn::update_enemy_turn(&mut game, grid_dt);
 
-        combat::update(&mut game, &mut assets, &rl, delta_time);
+        if !paused_at_frame_start && !paused(&game) {
+            combat::update(&mut game, &mut assets, &rl, delta_time);
+        }
         // online : mon résultat de mini-jeu, déposé par le combat, part chez l'adversaire
         if let (Some(connection), Some(result)) = (&connection, game.duel_exchange.to_send.take()) {
             connection.send(&Message::Duel(result));
@@ -555,7 +611,25 @@ fn main() {
                 delta_time,
                 &hud,
                 mouse_position,
-                game.guide_scroll,
+                game.guide_page,
+                game.online,
+            );
+        } else if game.game_mode == GameMode::SettingsScreen {
+            render::draw_settings_screen(
+                &mut d,
+                &assets,
+                &hud,
+                mouse_position,
+                game.settings_capture,
+            );
+        } else if game.game_mode == GameMode::PracticeScreen {
+            render::draw_practice_screen(
+                &mut d,
+                &mut assets,
+                delta_time,
+                &hud,
+                mouse_position,
+                &game.practice,
             );
         } else if game.game_mode == game_mode::GameMode::CombatScreen {
             if let Some((attacker_idx, defender_idx)) = game.active_combat {
@@ -599,6 +673,13 @@ fn main() {
                 &highlights.position_scores,
                 game.rematch.mine,
             );
+        }
+        drop(d);
+        #[cfg(debug_assertions)]
+        if let Some(tour) = &mut tour {
+            if !tour.after_frame(&mut rl, &thread) {
+                break;
+            }
         }
     }
 }

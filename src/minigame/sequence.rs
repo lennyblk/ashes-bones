@@ -1,4 +1,5 @@
 use crate::duel::{BASE_WINDOW, DuelSide};
+use crate::settings::{self, Bind};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use raylib::consts::KeyboardKey::{self, *};
 use raylib::prelude::*;
@@ -30,14 +31,14 @@ impl Arrow {
         }
     }
 
-    /// flèche du clavier + WASD. raylib lit la position physique des touches :
-    /// sur un clavier AZERTY, WASD correspond à ZQSD
+    /// flèche du clavier (toujours active) + la touche choisie dans les réglages
+    /// (WASD par défaut, soit ZQSD sur un clavier AZERTY)
     fn keys(self) -> [KeyboardKey; 2] {
         match self {
-            Arrow::Up => [KEY_UP, KEY_W],
-            Arrow::Down => [KEY_DOWN, KEY_S],
-            Arrow::Left => [KEY_LEFT, KEY_A],
-            Arrow::Right => [KEY_RIGHT, KEY_D],
+            Arrow::Up => [KEY_UP, settings::key(Bind::Up)],
+            Arrow::Down => [KEY_DOWN, settings::key(Bind::Down)],
+            Arrow::Left => [KEY_LEFT, settings::key(Bind::Left)],
+            Arrow::Right => [KEY_RIGHT, settings::key(Bind::Right)],
         }
     }
 

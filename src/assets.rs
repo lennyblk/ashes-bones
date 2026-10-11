@@ -54,25 +54,17 @@ pub struct Assets {
     pub hud_font: Font,
     pub alert_font: Font,
     pub info_font: Font,
-    pub btn_end_turn: Texture2D,
-    pub btn_wait: Texture2D,
-    pub btn_exit: Texture2D,
-    pub btn_retry: Texture2D,
-    pub btn_back: Texture2D,
-    pub btn_play: Texture2D,
-    pub btn_settings: Texture2D,
-    pub btn_guide: Texture2D,
-    pub banner_your_turn: Texture2D,
-    pub banner_enemy_turn: Texture2D,
+    // fonds de boutons et bannières sans texte : le texte est écrit par-dessus dans la
+    // langue choisie (ui::draw_button / draw_banner)
+    pub btn_menu_base: Texture2D,
+    pub btn_wood_base: Texture2D,
+    pub banner_turn_base: Texture2D,
+    pub banner_enemy_base: Texture2D,
     pub menu_background_texture: Texture2D,
     pub title_background_texture: Texture2D,
-    pub btn_exit_title_screen: Texture2D,
-    pub btn_play_title_screen: Texture2D,
-    pub btn_multi_title_screen: Texture2D,
-    pub btn_settings_title_screen: Texture2D,
-    pub btn_guide_title_screen: Texture2D,
-    pub btn_host: Texture2D,
-    pub btn_join: Texture2D,
+    // cadre du personnage dans la 1re frame idle de chaque classe : les frames ont
+    // beaucoup de vide autour, on recadre pour les portraits
+    portraits: Vec<(UnitClass, Rectangle)>,
 }
 
 impl Assets {
@@ -99,6 +91,15 @@ impl Assets {
             UnitClass::Skeleton => &mut self.skeleton,
             UnitClass::Necromancer => &mut self.necromancer,
         }
+    }
+
+    /// zone de la frame idle où se trouve vraiment le personnage
+    pub fn portrait(&self, class: UnitClass) -> Rectangle {
+        self.portraits
+            .iter()
+            .find(|(c, _)| *c == class)
+            .map(|(_, r)| *r)
+            .unwrap_or_default()
     }
 
     pub fn heal_animation_mut(&mut self, class: UnitClass) -> (&mut Animation, &mut Animation) {
@@ -596,45 +597,32 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
     let combat_screen_background_texture = rl
         .load_texture(thread, "assets/backgrounds/plains2.png")
         .unwrap();
-    let info_font = rl
-        .load_font_ex(thread, "assets/fonts/JetBrainsMono-Regular.ttf", 96, None)
+    // caractères à charger : ASCII + accents du français + quelques symboles. Les polices
+    // pixel « -fr » sont les originales avec les accents ajoutés (tools/add_french_accents.py)
+    let charset: String = (32u8..127)
+        .map(char::from)
+        .chain("éèêëàâîïôûùüçÉÈÊËÀÂÎÏÔÛÙÇ←↑→↓×·…—–’".chars())
+        .collect();
+    let load_font = |rl: &mut RaylibHandle, path: &str| {
+        let font = rl.load_font_ex(thread, path, 96, Some(&charset)).unwrap();
+        font.texture()
+            .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_BILINEAR);
+        font
+    };
+    let info_font = load_font(rl, "assets/fonts/JetBrainsMono-Regular.ttf");
+    let hud_font = load_font(rl, "assets/fonts/PixelParchment-fr.ttf");
+    let alert_font = load_font(rl, "assets/fonts/ThaleahFat-fr.ttf");
+    let btn_menu_base = rl
+        .load_texture(thread, "assets/menu-ui/btn_blank.png")
         .unwrap();
-    let hud_font = rl
-        .load_font_ex(thread, "assets/fonts/PixelParchment.ttf", 96, None)
+    let btn_wood_base = rl
+        .load_texture(thread, "assets/turnbased-ui/btn_blank.png")
         .unwrap();
-    hud_font
-        .texture()
-        .set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_BILINEAR);
-    let alert_font = rl.load_font(thread, "assets/fonts/ThaleahFat.ttf").unwrap();
-    let btn_end_turn = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_end_turn_normal.png")
+    let banner_turn_base = rl
+        .load_texture(thread, "assets/turnbased-ui/banner_turn_blank.png")
         .unwrap();
-    let btn_retry = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_retry_normal.png")
-        .unwrap();
-    let btn_exit = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_exit_normal.png")
-        .unwrap();
-    let btn_back = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_back_normal.png")
-        .unwrap();
-    let btn_wait = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_wait_normal.png")
-        .unwrap();
-    let btn_play = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_play_normal.png")
-        .unwrap();
-    let btn_settings = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_settings_normal.png")
-        .unwrap();
-    let btn_guide = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_guide_normal.png")
-        .unwrap();
-    let banner_your_turn = rl
-        .load_texture(thread, "assets/turnbased-ui/banner_your_turn.png")
-        .unwrap();
-    let banner_enemy_turn = rl
-        .load_texture(thread, "assets/turnbased-ui/banner_enemy_phase.png")
+    let banner_enemy_base = rl
+        .load_texture(thread, "assets/turnbased-ui/banner_enemy_blank.png")
         .unwrap();
     let menu_background_texture = rl
         .load_texture(thread, "assets/backgrounds/plains1.png")
@@ -642,28 +630,7 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
     let title_background_texture = rl
         .load_texture(thread, "assets/backgrounds/title.png")
         .unwrap();
-    let btn_exit_title_screen = rl
-        .load_texture(thread, "assets/menu-ui/btn_exit_normal.png")
-        .unwrap();
-    let btn_play_title_screen = rl
-        .load_texture(thread, "assets/menu-ui/btn_play_normal.png")
-        .unwrap();
-    let btn_multi_title_screen = rl
-        .load_texture(thread, "assets/menu-ui/btn_multiplayer_normal.png")
-        .unwrap();
-    let btn_settings_title_screen = rl
-        .load_texture(thread, "assets/menu-ui/btn_settings_normal.png")
-        .unwrap();
-    let btn_guide_title_screen = rl
-        .load_texture(thread, "assets/menu-ui/btn_guide_normal.png")
-        .unwrap();
-    let btn_host = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_host_normal.png")
-        .unwrap();
-    let btn_join = rl
-        .load_texture(thread, "assets/turnbased-ui/btn_join_normal.png")
-        .unwrap();
-    Assets {
+    let mut assets = Assets {
         soldier: AnimationSet {
             idle: Animation {
                 texture: soldier_idle_texture,
@@ -1684,24 +1651,39 @@ pub fn load_assets(rl: &mut RaylibHandle, thread: &RaylibThread) -> Assets {
         hud_font,
         info_font,
         alert_font,
-        btn_end_turn,
-        btn_retry,
-        btn_back,
-        btn_exit,
-        btn_wait,
-        btn_play,
-        btn_settings,
-        btn_guide,
-        banner_your_turn,
-        banner_enemy_turn,
+        btn_menu_base,
+        btn_wood_base,
+        banner_turn_base,
+        banner_enemy_base,
         menu_background_texture,
         title_background_texture,
-        btn_exit_title_screen,
-        btn_play_title_screen,
-        btn_multi_title_screen,
-        btn_settings_title_screen,
-        btn_guide_title_screen,
-        btn_host,
-        btn_join,
+        portraits: Vec::new(),
+    };
+    for (class, path) in IDLE_PATHS {
+        let idle = &assets.animation_set_mut(class).idle;
+        let frame = Rectangle::new(0.0, 0.0, idle.frame_width as f32, idle.frame_height as f32);
+        let bounds = Image::load_image(path)
+            .map(|mut image| {
+                image.crop(frame);
+                image.get_image_alpha_border(0.1)
+            })
+            .unwrap_or(frame);
+        assets.portraits.push((class, bounds));
     }
+    assets
 }
+
+const IDLE_PATHS: [(UnitClass, &str); 12] = [
+    (UnitClass::Soldier, "assets/humanChar/Human soldier/Human soldier/human_soldier-Idle.png"),
+    (UnitClass::Cavalry, "assets/humanChar/Human cavalry/Human cavalry/human_cavalry_idle.png"),
+    (UnitClass::Assassin, "assets/humanChar/Human assassin/Human assassin/human_assassin_idle.png"),
+    (UnitClass::Longbowman, "assets/humanChar/Human longbowman/Human longbowman/human_longbowman_idle.png"),
+    (UnitClass::Mage, "assets/humanChar/Human mage/Human mage/human_mage-Idle.png"),
+    (UnitClass::Priest, "assets/humanChar/Human priest/Human priest/human_priest-Idle.png"),
+    (UnitClass::Wraith, "assets/undeadChar/Undead Wraith 32x32/Undead Wraith/Wraith-Idle.png"),
+    (UnitClass::Banshee, "assets/undeadChar/Undead Banshee 32x32/Undead Banshee/Banshee-Idle.png"),
+    (UnitClass::BloodKnight, "assets/undeadChar/Undead Blood Knight 32x32/Undead Blood Knight/Blood Knight-Idle.png"),
+    (UnitClass::Ghoul, "assets/undeadChar/Undead Ghoul 32x32/Undead Ghoul/Ghoul-Idle.png"),
+    (UnitClass::Skeleton, "assets/undeadChar/Undead Skeleton 32x32/Undead Skeleton/Skeleton-Idle.png"),
+    (UnitClass::Necromancer, "assets/undeadChar/Undead Necromancer 32x32/Undead Necromancer/Necromancer-Idle.png"),
+];

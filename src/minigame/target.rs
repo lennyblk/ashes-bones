@@ -73,7 +73,7 @@ impl TargetShot {
         self.time += delta_time * self.tempo;
         self.aim = rl.get_mouse_position();
 
-        if !rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+        if !crate::input::duel_action_pressed(rl) {
             return None;
         }
         let distance = self.aim.distance(self.target_center());

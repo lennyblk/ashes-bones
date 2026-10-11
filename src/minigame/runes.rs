@@ -1,4 +1,5 @@
 use crate::duel::{BASE_WINDOW, DuelSide};
+use crate::settings::{self, Bind};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use raylib::prelude::*;
 
@@ -154,12 +155,15 @@ impl RuneMemory {
                     self.done = 0;
                     return Some(Attempt::Miss);
                 }
-                if !rl.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
-                    return None;
-                }
-                // clic à côté des runes : ignoré
-                let clicked =
-                    (0..RUNE_COUNT).find(|&i| self.aim.distance(rune_center(i)) <= RUNE_RADIUS)?;
+                // clic sur une rune, ou sa touche (1 2 3 4 par défaut). Clic à côté : ignoré
+                let by_key = (0..RUNE_COUNT).find(|&i| settings::pressed(rl, Bind::RUNES[i]));
+                let by_click = rl
+                    .is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT)
+                    .then(|| {
+                        (0..RUNE_COUNT).find(|&i| self.aim.distance(rune_center(i)) <= RUNE_RADIUS)
+                    })
+                    .flatten();
+                let clicked = by_key.or(by_click)?;
                 if clicked != self.sequence[self.done] {
                     // mauvaise rune : raté, on reste au même endroit de la suite
                     self.wrong_flash = 0.3;
@@ -176,6 +180,26 @@ impl RuneMemory {
                     TimingResult::Good
                 }))
             }
+        }
+    }
+
+    /// touche de chaque rune, écrite sous elle (seulement quand on doit recliquer)
+    pub fn draw_key_hints(&self, d: &mut RaylibDrawHandle, font: &Font) {
+        if self.is_showing() {
+            return;
+        }
+        for (i, bind) in Bind::RUNES.iter().enumerate() {
+            let label = settings::key_name(settings::key(*bind));
+            let size = font.measure_text(&label, 18.0, 1.0);
+            let center = rune_center(i);
+            d.draw_text_ex(
+                font,
+                &label,
+                Vector2::new(center.x - size.x / 2.0, center.y - size.y / 2.0),
+                18.0,
+                1.0,
+                Color::new(255, 255, 255, 200),
+            );
         }
     }
 

@@ -4,5 +4,7 @@ pub mod guide;
 pub mod host;
 pub mod multiplayer;
 pub mod pause;
+pub mod practice;
+pub mod settings;
 pub mod title;
 pub mod winfo;
