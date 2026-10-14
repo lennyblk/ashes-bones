@@ -149,10 +149,12 @@ fn main() {
         };
 
         let mouse_position = rl.get_mouse_position();
-        // en pause ou dans le guide, la partie est gelée : ni mouvement ni animation
+        // en pause, dans le guide ou les settings, la partie est gelée : ni mouvement ni animation
         if !matches!(
             game.game_mode,
-            game_mode::GameMode::PauseScreen | game_mode::GameMode::GuideScreen
+            game_mode::GameMode::PauseScreen
+                | game_mode::GameMode::GuideScreen
+                | game_mode::GameMode::SettingsScreen
         ) {
             for unit in game.units.iter_mut() {
                 unit.update_position(grid_dt);
@@ -289,6 +291,7 @@ fn main() {
             break;
         }
         screens::guide::update(&mut game, &rl, &hud, mouse_position);
+        screens::settings::update(&mut game, &rl, &hud, mouse_position);
         screens::faction_selection::update(&mut game, &rl, mouse_position, click_consumed);
         if screens::game_over::update(&mut game, &rl, &hud, mouse_position, &mut click_consumed) {
             break;
@@ -557,6 +560,8 @@ fn main() {
                 mouse_position,
                 game.guide_scroll,
             );
+        } else if game.game_mode == GameMode::SettingsScreen {
+            render::draw_settings_screen(&mut d, &mut assets, delta_time, &hud, mouse_position);
         } else if game.game_mode == game_mode::GameMode::CombatScreen {
             if let Some((attacker_idx, defender_idx)) = game.active_combat {
                 render::draw_combat_screen(

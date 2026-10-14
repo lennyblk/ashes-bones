@@ -19,9 +19,10 @@ pub struct Game {
     pub inspected_enemy: Option<usize>,
 
     pub game_mode: GameMode,
-    // écran auquel revenir en quittant le menu pause / le guide
+    // écran auquel revenir en quittant le menu pause / le guide / les settings
     pub paused_from: GameMode,
     pub guide_return_to: GameMode,
+    pub settings_return_to: GameMode,
     // scroll du guide en pixels, et drag de sa scrollbar en cours
     pub guide_scroll: f32,
     pub guide_dragging: bool,
@@ -92,6 +93,7 @@ impl Game {
             game_mode: GameMode::TitleScreen,
             paused_from: GameMode::GridScreen,
             guide_return_to: GameMode::TitleScreen,
+            settings_return_to: GameMode::TitleScreen,
             guide_scroll: 0.0,
             guide_dragging: false,
             lobby_selected: None,

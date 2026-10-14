@@ -16,6 +16,7 @@ pub fn handle_escape(game: &mut Game, rl: &RaylibHandle) {
         }
         GameMode::PauseScreen => game.game_mode = game.paused_from,
         GameMode::GuideScreen => game.game_mode = game.guide_return_to,
+        GameMode::SettingsScreen => game.game_mode = game.settings_return_to,
         GameMode::HostScreen => game.game_mode = GameMode::MultiplayerScreen,
         GameMode::MultiplayerScreen => {
             game.game_mode = GameMode::TitleScreen;
@@ -34,7 +35,8 @@ pub fn update(game: &mut Game, rl: &RaylibHandle, hud: &HudRects, mouse_position
         return true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_settings) {
-        // TODO: écran settings
+        game.settings_return_to = GameMode::PauseScreen;
+        game.game_mode = GameMode::SettingsScreen;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_pause_guide) {
         game.guide_return_to = GameMode::PauseScreen;

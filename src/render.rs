@@ -11,7 +11,7 @@ use crate::minigame::{MiniGame, ResultDisplay, TimingResult};
 use crate::network::Browser;
 use crate::screens::host::{self, HostField, HostForm};
 use crate::screens::multiplayer;
-use crate::screens::{guide, winfo};
+use crate::screens::{guide, settings, winfo};
 use crate::ui::{self, HudRects};
 use crate::unit::{Faction, Unit, UnitState};
 use crate::{SCREEN_HEIGHT, SCREEN_WIDTH, TILE_SIZE};
@@ -284,6 +284,154 @@ pub fn draw_guide_screen(
     );
 }
 
+// Settings screen -----------------------------------------------------------------
+pub fn draw_settings_screen(
+    d: &mut RaylibDrawHandle,
+    assets: &mut Assets,
+    delta_time: f32,
+    hud: &HudRects,
+    mouse_position: Vector2,
+) {
+    draw_fullscreen_texture(d, &assets.menu_background_texture);
+
+    // titre entre deux persos idle (pas ceux des autres écrans)
+    let title = "Settings";
+    let title_size = 48.0;
+    let title_text_size = assets.hud_font.measure_text(title, title_size, 1.0);
+    let title_pos = Vector2::new(
+        SCREEN_WIDTH as f32 / 2.0 - title_text_size.x / 2.0,
+        settings::HEADER_HEIGHT / 2.0 - title_text_size.y / 2.0,
+    );
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos + Vector2::new(2.0, 2.0),
+        title_size,
+        1.0,
+        Color::new(0, 0, 0, 160),
+    );
+    d.draw_text_ex(
+        &assets.hud_font,
+        title,
+        title_pos,
+        title_size,
+        1.0,
+        Color::WHITE,
+    );
+    let sprite_size = 190.0;
+    let sprite_top = settings::HEADER_HEIGHT / 2.0 - sprite_size / 2.0 + 10.0;
+    let sprite_offset = title_text_size.x / 2.0 + 90.0;
+    draw_idle_card(
+        d,
+        &mut assets.priest.idle,
+        SCREEN_WIDTH as f32 / 2.0 - sprite_offset,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+    draw_idle_card(
+        d,
+        &mut assets.wraith.idle,
+        SCREEN_WIDTH as f32 / 2.0 + sprite_offset,
+        sprite_top,
+        sprite_size,
+        delta_time,
+    );
+
+    let panel = settings::panel_rect(hud);
+    d.draw_rectangle_rec(panel, Color::new(20, 20, 20, 210));
+    d.draw_rectangle_lines_ex(panel, 2.0, Color::new(255, 255, 255, 90));
+
+    let column_width = (panel.width - settings::PANEL_PAD * 2.0 - settings::COLUMN_GAP) / 2.0;
+    for (i, column) in settings::columns().iter().enumerate() {
+        let x = panel.x + settings::PANEL_PAD + i as f32 * (column_width + settings::COLUMN_GAP);
+        let mut y = panel.y + settings::PANEL_PAD;
+        for section in column {
+            draw_settings_section(d, assets, section, x, y, column_width);
+            y += settings::HEADING_HEIGHT
+                + section.rows.len() as f32 * settings::ROW_HEIGHT
+                + settings::SECTION_GAP;
+        }
+    }
+
+    ui::draw_text_button(d, &assets.hud_font, hud.btn_guide_back, "Back");
+
+    d.draw_texture_ex(
+        assets.cursor_texture(CursorType::Normal),
+        Vector2::new(mouse_position.x, mouse_position.y),
+        0.0,
+        0.7,
+        Color::WHITE,
+    );
+}
+
+fn draw_settings_section(
+    d: &mut RaylibDrawHandle,
+    assets: &Assets,
+    section: &settings::Section,
+    x: f32,
+    y: f32,
+    width: f32,
+) {
+    d.draw_text_ex(
+        &assets.hud_font,
+        section.title,
+        Vector2::new(x, y),
+        settings::HEADING_SIZE,
+        1.0,
+        LOBBY_GOLD,
+    );
+    let underline_y = y + settings::HEADING_SIZE + 4.0;
+    d.draw_line_ex(
+        Vector2::new(x, underline_y),
+        Vector2::new(x + width, underline_y),
+        1.0,
+        Color::new(255, 255, 255, 60),
+    );
+
+    let mut row_y = y + settings::HEADING_HEIGHT;
+    for (key, description) in &section.rows {
+        let key_size = assets.hud_font.measure_text(key, settings::TEXT_SIZE, 1.0);
+        if section.keys {
+            // touche de clavier : cadre autour du nom
+            let cap = Rectangle {
+                x,
+                y: row_y,
+                width: key_size.x + 16.0,
+                height: settings::ROW_HEIGHT - 8.0,
+            };
+            d.draw_rectangle_rec(cap, Color::new(60, 60, 60, 230));
+            d.draw_rectangle_lines_ex(cap, 2.0, Color::new(255, 255, 255, 140));
+            d.draw_text_ex(
+                &assets.hud_font,
+                key,
+                Vector2::new(cap.x + 8.0, cap.y + cap.height / 2.0 - key_size.y / 2.0),
+                settings::TEXT_SIZE,
+                1.0,
+                Color::WHITE,
+            );
+        } else {
+            d.draw_text_ex(
+                &assets.hud_font,
+                key,
+                Vector2::new(x, row_y + 3.0),
+                settings::TEXT_SIZE,
+                1.0,
+                LOBBY_MUTED,
+            );
+        }
+        d.draw_text_ex(
+            &assets.info_font,
+            description,
+            Vector2::new(x + settings::KEY_COLUMN, row_y + 3.0),
+            settings::TEXT_SIZE,
+            1.0,
+            Color::WHITE,
+        );
+        row_y += settings::ROW_HEIGHT;
+    }
+}
+
 fn draw_guide_block(
     d: &mut impl RaylibDraw,
     assets: &Assets,
@@ -328,7 +476,6 @@ fn draw_guide_block(
                 .map(|row| row.chars().filter(|c| !c.is_whitespace()).count())
                 .max()
                 .unwrap_or(0);
-            // légendes alignées sur une même colonne (min 3 cases de large)
             let caption_x = x + columns.max(3) as f32 * guide::DIAGRAM_CELL + 24.0;
             for (i, line) in caption.iter().enumerate() {
                 d.draw_text_ex(

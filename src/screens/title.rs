@@ -27,7 +27,9 @@ pub fn update(
         *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_settings_title_screen) {
-        // TODO: écran settings
+        game.settings_return_to = GameMode::TitleScreen;
+        game.game_mode = GameMode::SettingsScreen;
+        *click_consumed = true;
     }
     if input::is_button_clicked(mouse_position, clicked, hud.btn_learn_title_screen) {
         game.guide_return_to = GameMode::TitleScreen;
