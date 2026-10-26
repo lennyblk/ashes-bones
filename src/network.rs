@@ -8,10 +8,13 @@
 //!   RETRY           revanche demandée en fin de partie
 //!
 //!   découverte en LAN (UDP broadcast, port 6667), annoncée par l'hôte toutes les secondes :
-//!   ASHES|0.1.0|human|open|nom de la partie|nom de l'hôte      (version du jeu, open / full)
+//!   ASHES|0.1.0|human|open|nom de la partie|nom de l'hôte|2a01:cb01::1
+//!   (version du jeu, open / full, puis l'IPv6 de l'hôte : vide s'il n'en a pas)
 
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
-use std::net::{IpAddr, Shutdown, TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
+use std::net::{
+    IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, TcpListener, TcpStream, ToSocketAddrs, UdpSocket,
+};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -100,21 +103,34 @@ impl Drop for Connection {
 
 /// l'hôte attend son adversaire sans geler la fenêtre. Le jeter annule l'attente
 pub struct Host {
-    listener: TcpListener,
+    listeners: Vec<TcpListener>,
 }
 
 impl Host {
     pub fn new() -> io::Result<Host> {
-        // 0.0.0.0 = accepter les connexions qui arrivent par n'importe quelle carte réseau
-        let listener = TcpListener::bind(("0.0.0.0", PORT))?;
-        // accept() répondra « personne » tout de suite au lieu d'attendre
-        listener.set_nonblocking(true)?;
-        Ok(Host { listener })
+        // :: et 0.0.0.0 = accepter les connexions qui arrivent par n'importe quelle carte
+        // réseau, en IPv6 et en IPv4. Sur macOS / Linux, :: prend souvent déjà l'IPv4 et
+        // 0.0.0.0 échoue alors (normal) ; sur Windows, :: ne prend que l'IPv6
+        let mut listeners = Vec::new();
+        let mut last_error = None;
+        for ip in [IpAddr::V6(Ipv6Addr::UNSPECIFIED), IpAddr::V4(Ipv4Addr::UNSPECIFIED)] {
+            // accept() répondra « personne » tout de suite au lieu d'attendre
+            let listener = TcpListener::bind((ip, PORT))
+                .and_then(|l| l.set_nonblocking(true).map(|_| l));
+            match listener {
+                Ok(listener) => listeners.push(listener),
+                Err(e) => last_error = Some(e),
+            }
+        }
+        match last_error {
+            Some(e) if listeners.is_empty() => Err(e),
+            _ => Ok(Host { listeners }),
+        }
     }
 
     /// à appeler à chaque frame : None tant que personne n'est arrivé
     pub fn try_accept(&self) -> Option<io::Result<Connection>> {
-        match self.listener.accept() {
+        self.listeners.iter().find_map(|listener| match listener.accept() {
             // le tunnel, lui, doit rester bloquant : c'est le thread lecteur qui attend dessus
             Ok((stream, _)) => Some(
                 stream
@@ -123,7 +139,7 @@ impl Host {
             ),
             Err(e) if e.kind() == ErrorKind::WouldBlock => None,
             Err(e) => Some(Err(e)),
-        }
+        })
     }
 }
 
@@ -329,7 +345,8 @@ impl Announcer {
             return Ok(());
         }
         self.last_sent = Some(Instant::now());
-        let text = encode_info(&self.info);
+        // recalculée à chaque annonce : le réseau peut changer pendant l'attente
+        let text = encode_info(&self.info, local_ipv6());
         self.socket
             .send_to(text.as_bytes(), ("255.255.255.255", DISCOVERY_PORT))?;
         Ok(())
@@ -363,19 +380,25 @@ impl Browser {
     pub fn update(&mut self) {
         let mut buffer = [0u8; 512];
         while let Ok((size, from)) = self.socket.recv_from(&mut buffer) {
-            let Some(info) = std::str::from_utf8(&buffer[..size])
+            let Some((info, ipv6)) = std::str::from_utf8(&buffer[..size])
                 .ok()
                 .and_then(decode_info)
             else {
                 continue; // pas une annonce du jeu
             };
-            match self.games.iter_mut().find(|g| g.address == from.ip()) {
+            // réseau IPv6 seulement (ex : partage de connexion) : l'IPv4 reçue est une fausse
+            // adresse, la même sur chaque appareil. On rejoindra l'hôte par son IPv6
+            let address = match ipv6 {
+                Some(ipv6) if is_clat(from.ip()) => IpAddr::V6(ipv6),
+                _ => from.ip(),
+            };
+            match self.games.iter_mut().find(|g| g.address == address) {
                 Some(game) => {
                     game.info = info;
                     game.last_seen = Instant::now();
                 }
                 None => self.games.push(LanGame {
-                    address: from.ip(),
+                    address,
                     info,
                     last_seen: Instant::now(),
                 }),
@@ -394,10 +417,11 @@ impl Browser {
     }
 }
 
-fn encode_info(info: &GameInfo) -> String {
+fn encode_info(info: &GameInfo, ipv6: Option<Ipv6Addr>) -> String {
     let state = if info.full { "full" } else { "open" };
+    let ipv6 = ipv6.map(|ip| ip.to_string()).unwrap_or_default();
     format!(
-        "ASHES|{}|{}|{state}|{}|{}",
+        "ASHES|{}|{}|{state}|{}|{}|{ipv6}",
         info.version,
         faction_name(info.host_faction),
         info.name,
@@ -405,12 +429,17 @@ fn encode_info(info: &GameInfo) -> String {
     )
 }
 
-fn decode_info(text: &str) -> Option<GameInfo> {
+/// annonce reçue -> la partie, et l'IPv6 de l'hôte s'il en a une
+fn decode_info(text: &str) -> Option<(GameInfo, Option<Ipv6Addr>)> {
     let parts: Vec<&str> = text.split('|').collect();
-    let ["ASHES", version, faction, state, name, host_name] = parts.as_slice() else {
+    // sans le champ IPv6 : annonce d'une ancienne version, listée comme incompatible
+    let (["ASHES", version, faction, state, name, host_name]
+    | ["ASHES", version, faction, state, name, host_name, _]) = parts.as_slice()
+    else {
         return None;
     };
-    Some(GameInfo {
+    let ipv6 = parts.get(6).and_then(|ip| ip.parse().ok());
+    let info = GameInfo {
         version: version.to_string(),
         name: name.to_string(),
         host_name: host_name.to_string(),
@@ -420,5 +449,22 @@ fn decode_info(text: &str) -> Option<GameInfo> {
             "full" => true,
             _ => return None,
         },
-    })
+    };
+    Some((info, ipv6))
+}
+
+/// IPv6 de ce PC sur le réseau, None s'il n'en a pas. Connecter un socket UDP n'envoie
+/// rien : l'OS choisit juste la carte réseau et l'adresse qu'il utiliserait
+fn local_ipv6() -> Option<Ipv6Addr> {
+    let socket = UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0)).ok()?;
+    socket.connect("[2001:4860:4860::8888]:53").ok()?;
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V6(ip) if !ip.is_loopback() && !ip.is_unspecified() => Some(ip),
+        _ => None,
+    }
+}
+
+/// 192.0.0.0/29 : adresse IPv4 inventée par l'OS sur un réseau IPv6 seulement (CLAT)
+fn is_clat(ip: IpAddr) -> bool {
+    matches!(ip, IpAddr::V4(v4) if matches!(v4.octets(), [192, 0, 0, 0..=7]))
 }
